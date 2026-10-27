@@ -1,0 +1,8 @@
+# 本地是 Windows、CI 与产物校验在 Linux：换行必须与 core.autocrlf 无关
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary
+*.avif binary
+*.sqlite binary
+*.gz binary
