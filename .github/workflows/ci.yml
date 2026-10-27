@@ -26,9 +26,10 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
+      # 不写 version：action-setup v4 见到 version 输入与 package.json 的
+      # packageManager 同时存在会直接失败（ERR_PNPM_BAD_PM_VERSION），
+      # 版本口径只留 packageManager 一处
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 24

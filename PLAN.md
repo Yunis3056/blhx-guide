@@ -1403,7 +1403,8 @@ jobs:
       - uses: actions/checkout@v4
         with: { persist-credentials: true, fetch-depth: 1, fetch-tags: true }
       - uses: pnpm/action-setup@v4
-        with: { version: 9 }               # 与 packageManager 字段一致，见 §2
+        # 不给 version 输入：v4 见到 version 与 package.json 的 packageManager 同时存在
+        # 会直接失败（首跑实测报 ERR_PNPM_BAD_PM_VERSION），版本口径只留 packageManager 一处
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
@@ -1551,8 +1552,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 9 }
+      - uses: pnpm/action-setup@v4         # 不写 version，理由见 §6.1
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
@@ -1656,9 +1656,8 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.gate.outputs.enabled == 'true'
         with: { persist-credentials: true }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4         # 不写 version，理由见 §6.1
         if: steps.gate.outputs.enabled == 'true'
-        with: { version: 9 }
       - uses: actions/setup-node@v4
         if: steps.gate.outputs.enabled == 'true'
         with: { node-version: 24, cache: pnpm }
