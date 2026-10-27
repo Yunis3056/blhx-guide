@@ -1,0 +1,76 @@
+name: ci
+
+# PR 与手动触发跑「lint + typecheck + 测试 + 构建演练 + 静态导出守卫」。
+# 不在每个 push 上跑全量构建：站点构建本身就是 Pages 侧的额度项（§0 成本表）。
+on:
+  pull_request: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # 构建链不读 data/raw（raw 不入库），所以这一步同时验证了
+      # 「干净检出 + 已提交 normalized 就能重建站点」——核心原则 2 的机器化口径
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+      - name: 静态导出守卫（PLAN §4.6）
+        run: |
+          set -euo pipefail
+          test -d apps/web/app || { echo "::error::apps/web/app 不存在，守卫扫的是空目录，会静默通过"; exit 1; }
+          test -d apps/web/out || { echo "::error::没有 out/ 产物"; exit 1; }
+
+          # 只扫 HTML：Next 自带的 main-*.js 运行时 chunk 里就有 `/_next/image` 字面量，
+          # 扫全目录的写法永远红；而 `undefined` 裸词在 RSC 载荷里以 "$undefined" 出现几十次，
+          # 必须带斜杠才对应「图片基址没注入」这一种真实故障
+          if grep -rl "_next/image" apps/web/out --include="*.html"; then
+            echo "::error::HTML 里出现 /_next/image，静态导出在 Pages 上会 404"; exit 1
+          fi
+          if grep -rl "undefined/" apps/web/out --include="*.html"; then
+            echo "::error::HTML 里出现 undefined/ 前缀，检查 NEXT_PUBLIC_IMG_BASE"; exit 1
+          fi
+          if grep -rnE "export const (runtime|revalidate|fetchCache|preferredRegion)( |=)|revalidatePath\(|\bcookies\(|\bheaders\(" apps/web/app apps/web/lib; then
+            echo "::error::发现服务器专用 API（主判据是 apps/web/eslint.config.mjs，这条是兜底）"; exit 1
+          fi
+
+      - name: 产物预算守卫（PLAN §4.5）
+        run: |
+          set -euo pipefail
+          n=$(find apps/web/out -type f | wc -l)
+          echo "产物文件数 $n"
+          [ "$n" -lt 18000 ] || { echo "::error::文件数超 18,000"; find apps/web/out -type d | head -40; exit 1; }
+          big=$(find apps/web/out -type f -size +25M)
+          [ -z "$big" ] || { echo "::error::单文件超 25 MiB：$big"; exit 1; }
+
+      - name: 每个声明的路由都有 HTML
+        run: |
+          set -euo pipefail
+          # 路由名单由 lib/slice.ts 唯一决定；产物里缺任何一条就是「构建成功但页面没了」
+          for g in $(node --experimental-strip-types --input-type=module -e \
+            "import { STAGE1_SHIPS } from './apps/web/lib/slice.ts'; console.log(STAGE1_SHIPS.join(' '))"); do
+            f="apps/web/out/ship/$g/index.html"
+            [ -f "$f" ] || { echo "::error::缺少预渲染页面 $f"; exit 1; }
+          done
+          [ -f apps/web/out/index.html ] || { echo "::error::缺少首页"; exit 1; }
+          echo "路由覆盖检查通过"

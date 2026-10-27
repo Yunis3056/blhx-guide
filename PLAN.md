@@ -1702,7 +1702,29 @@ jobs:
 
 ---
 
-## 7. 实施顺序
+### 6.7 `ci.yml`（已落地）与部署通道
+
+`.github/workflows/ci.yml` 在 PR 与手动触发时跑：`pnpm typecheck` → `pnpm lint` → `pnpm test` → `pnpm build`，然后三条守卫：
+
+- **静态导出守卫**：HTML 里 grep 不到 `/_next/image` 与 `undefined/`；`apps/web/app` 与 `apps/web/out` 目录不存在即失败（不写这条，`grep` 扫空目录会返回成功，给出「已守卫」的假象）。搜索范围只限 `*.html`，理由见 §4.6 的实测口径
+- **产物预算守卫**：文件数 < 18,000、单文件 < 25 MiB
+- **路由覆盖守卫**：从 `apps/web/lib/slice.ts` 读出这一版声明的路由，逐个断言 `out/ship/<groupType>/index.html` 存在——名单只有一处定义，首页链接列表与 `generateStaticParams` 都读它，避免「首页链到一个没渲染的路径」
+
+四条命令与三段脚本都在本机跑通过（当前产物 24 文件 / 4 个 HTML）。CI 里没有 `data/raw`，`pnpm build` 照样出全部产物，这正是 §4.6 那条「干净检出即可重建」的机器化形态。
+
+**部署通道（用户选定：wrangler + API Token，首个线上版本用 `*.pages.dev`）**：
+
+```
+CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
+  npx --yes wrangler@latest pages deploy apps/web/out \
+  --project-name=<项目名> --branch=main --commit-dirty=true
+```
+
+- 凭据**不进仓库、不进对话**：token 放在仓库外的文件里，命令用 `$(cat ...)` 现场读取；权限按最小项给——`Cloudflare Pages: Edit` + 对应 Account
+- `wrangler` 不进 `package.json` 依赖：只有部署这一步用它，进锁文件会让每次 CI `pnpm install` 多拉一份用不到的二进制
+- 走 wrangler 直传产物时，Pages 项目的构建来源必须是 **Direct Upload**。如果同一仓库同时留着 Git 集成（Connected → 自动构建），两条链路会互相覆盖，症状是「线上页面不是刚部署的那一版」，且日志各说各话
+- 环境变量在 Pages 项目设置里配，只有一个名字：`NEXT_PUBLIC_IMG_BASE`。无图模式（§8.5）下留空即可——产物里根本不出 `<img>`
+
 
 不含工期，只给依赖与验收。**排序原则：不依赖用户人力且已被数据证实的前置；依赖用户判断或来源未定位的后置。**
 
