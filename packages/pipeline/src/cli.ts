@@ -8,8 +8,12 @@ import { manualPath } from './paths.ts'
 import { buildNameCode, assertAllResolve, placeholderCount } from './normalize/name-code.ts'
 import { readShipRows, groupStageRows, rarityBySkin, assertStageShape } from './normalize/stage-rows.ts'
 import { readGametip } from './display/gametip.ts'
-import { loadFactions, assertNamesAgreeWithGametip, assertCovers } from './display/factions.ts'
+import { loadFactions, assertNamesAgreeWithGametip, assertCovers, factionMap } from './display/factions.ts'
 import { loadRarityDecl, buildShipRarity, assertObservedRarity } from './display/rarity.ts'
+import { buildShipRecords } from './normalize/ship.ts'
+import { buildRetrofits } from './normalize/retrofit.ts'
+import { buildFleetTech } from './normalize/fleet-tech.ts'
+import { writeJsonl } from './normalize/jsonl.ts'
 
 const ROOT = join(import.meta.dirname!, '..', '..', '..')
 const RAW = join(ROOT, 'data', 'raw')
@@ -176,6 +180,87 @@ async function cmdValidate(): Promise<void> {
 }
 
 /**
+ * 1.7 归一化三层 + 改造 + 舰队科技 → data/normalized/*.jsonl.gz
+ *
+ * 这一步不写 manifest（1.8），但已经带上全部 join 断言：任何一侧对不上就中止，
+ * 产出的文件永远是「完整且自洽」的，不会出现在线页面缺半列的情况。
+ */
+function cmdNormalize(): void {
+  const sha = currentSha()
+  const root = join(RAW, sha)
+  const outDir = join(ROOT, 'data', 'normalized')
+  const reportDir = join(ROOT, 'reports')
+
+  const attrMap = buildAttrMap(root, sha)
+  const tip = readGametip(root, sha)
+  const factions = loadFactions(manualPath(ROOT, 'factions'))
+  assertNamesAgreeWithGametip(factions, tip)
+  assertCovers(
+    factions,
+    Object.values(readTable(root, sha, relPath(TABLES.shipGroup)) as Record<string, { nationality: number }>).map(
+      (g) => g.nationality,
+    ),
+  )
+  const factionNames = new Map<number, string>()
+  for (const f of factions) {
+    const t = tip[`word_shipNation_${f.wordKey}`]?.tip
+    if (t === undefined) throw new Error(`阵营 ${f.nationality} 的词键 word_shipNation_${f.wordKey} 在 gametip 里不存在`)
+    factionNames.set(f.nationality, t)
+  }
+  const decl = loadRarityDecl(manualPath(ROOT, 'rarity'))
+  const rarityLabels = new Map(buildShipRarity(tip, decl.ship.declaredDomain).map((r) => [r.value, r.label]))
+  const nameCode = buildNameCode(root, sha)
+
+  const fleet = buildFleetTech(root, sha)
+  const built = buildShipRecords(root, sha, {
+    attrMap,
+    rarityLabels,
+    factions: factionMap(factions),
+    factionNames,
+    nameCode,
+    fleetTechClassByGroup: fleet.classByGroup,
+    fleetTechClassNationByGroup: fleet.classNationByGroup,
+  })
+  const retrofits = buildRetrofits(root, sha)
+
+  const files = [
+    { name: 'ships.jsonl.gz', rows: built.ships },
+    { name: 'ship-stages.jsonl.gz', rows: built.stages },
+    { name: 'ship-skins.jsonl.gz', rows: built.skins },
+    { name: 'ship-retrofits.jsonl.gz', rows: retrofits },
+    { name: 'fleet-tech.jsonl.gz', rows: fleet.rows },
+  ]
+  const written: Array<{ file: string; rows: number; bytes: number }> = []
+  for (const f of files) written.push({ file: f.name, ...writeJsonl(outDir, f.name, f.rows) })
+  const quarantineFile = writeJsonl(reportDir, 'quarantine.jsonl.gz', built.quarantine)
+
+  // 基线：这些数字是实测值，掉了就是上游或我们的 join 变了，必须有人来看
+  const baselines: Array<[string, number, number]> = [
+    ['ships', built.ships.length, 859],
+    ['ship-stages', built.stages.length, 3429],
+    ['ship-skins', built.skins.length, 2730],
+    ['ship-retrofits', retrofits.length, 106],
+    ['fleet-tech-group', fleet.counts.groups, 4],
+    ['fleet-tech-node', fleet.counts.nodes, 36],
+    ['fleet-tech-ship', fleet.counts.ships, 726],
+  ]
+  log(`归一化 ${sha.slice(0, 12)} → data/normalized/`)
+  for (const b of baselines) {
+    const mark = b[1] === b[2] ? 'ok' : `≠ 基线 ${b[2]}`
+    log(`  ${b[0].padEnd(18)} ${String(b[1]).padStart(5)}  ${mark}`)
+    if (b[1] !== b[2]) process.exitCode = 1
+  }
+  const noRarity = built.ships.filter((s) => s.rarity === null).length
+  const noFaction = built.ships.filter((s) => !s.factionName).length
+  const groups = new Set(built.ships.map((s) => s.groupType))
+  const orphanSkins = built.skins.filter((s) => !groups.has(s.groupType)).length
+  log(`  舰船无稀有度 ${noRarity} · 无阵营名 ${noFaction} · 孤儿皮肤 ${orphanSkins}（孤儿只登记不建页）`)
+  log(`  隔离清单 ${quarantineFile.rows} 条 → reports/quarantine.jsonl.gz`)
+  for (const w of written) log(`  ${w.file.padEnd(26)} ${String(w.rows).padStart(5)} 行  ${(w.bytes / 1024).toFixed(1)} KB gz`)
+  if (process.exitCode !== 1) log('PASS：三层 + 改造 + 舰队科技落盘，join 断言全通过')
+}
+
+/**
  * 构建期自检：不联网、不读原始数据，只验证注册表自身的一致性。
  * turbo 的 pipeline#build 跑这个，让「注册表写错」在 emit 之前就暴露。
  */
@@ -217,7 +302,10 @@ switch (cmd) {
   case 'validate':
     await cmdValidate()
     break
+  case 'normalize':
+    cmdNormalize()
+    break
   default:
-    log('用法: pipeline <--selfcheck|fetch|validate>')
+    log('用法: pipeline <--selfcheck|fetch|validate|normalize>')
     process.exitCode = 2
 }

@@ -20,6 +20,12 @@ export interface ShipRow {
   star: number
   rarity: number
   attrs: number[]
+  attrs_growth: number[]
+  attrs_growth_extra: number[]
+  english_name: string
+  armor_type: number
+  default_equip_list: number[]
+  fix_equip_list: number[]
 }
 
 export const stageIndexOf = (row: { id: number; skin_id: number }): number => row.id - row.skin_id
