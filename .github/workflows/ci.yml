@@ -72,16 +72,7 @@ jobs:
           [ -z "$big" ] || { echo "::error::单文件超 25 MiB：$big"; exit 1; }
 
       - name: 每个声明的路由都有 HTML
-        run: |
-          set -euo pipefail
-          # 路由名单由 lib/slice.ts 唯一决定；产物里缺任何一条就是「构建成功但页面没了」
-          for g in $(node --experimental-strip-types --input-type=module -e \
-            "import { STAGE1_SHIPS } from './apps/web/lib/slice.ts'; console.log(STAGE1_SHIPS.join(' '))"); do
-            f="apps/web/out/ship/$g/index.html"
-            [ -f "$f" ] || { echo "::error::缺少预渲染页面 $f"; exit 1; }
-          done
-          [ -f apps/web/out/index.html ] || { echo "::error::缺少首页"; exit 1; }
-          echo "路由覆盖检查通过"
+        run: node scripts/check-routes.mjs
 
       # ↓ 只在 main 上跑：PR（含 fork）没有 Secrets 读权限，也不该上线
       - name: 直传 Pages

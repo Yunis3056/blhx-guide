@@ -1,17 +1,17 @@
-import Link from 'next/link'
 import { openDb, readMeta } from '../lib/db'
 import { listShips } from '../lib/queries/ship'
-import { STAGE1_SHIPS } from '../lib/slice'
 
 /**
- * 阶段 1 的首页只做一件事：把已预渲染的路由列出来，并公开数据来源快照。
- * 筛选、搜索、分类页在阶段 2 接入；这里不放任何未渲染的链接。
+ * 首页只做一件事：公开「库里有多少」与「数据来自哪一代快照」。
+ *
+ * 这里不放任何指向未渲染路由的链接（列表页与分类页在 §7 阶段 2 的后续切片里接上）——
+ * 静态站上的死链不会报错，只会在用户点下去时变成 404。
  */
 export default function HomePage() {
   const db = openDb()
   const meta = readMeta(db)
-  const all = listShips(db)
-  const rendered = all.filter((s) => STAGE1_SHIPS.includes(s.groupType))
+  const ships = listShips(db)
+  const count = (key: string): string => meta.get(key) ?? '—'
 
   return (
     <main>
@@ -27,26 +27,43 @@ export default function HomePage() {
           schema <b>v{meta.get('schema_version')}</b>
         </span>
       </p>
+
+      <h2>图鉴规模</h2>
+      <table>
+        <tbody>
+          <tr>
+            <td>舰船条目</td>
+            <td>{count('count:ship')}</td>
+          </tr>
+          <tr>
+            <td>突破阶段行</td>
+            <td>{count('count:ship_stage')}</td>
+          </tr>
+          <tr>
+            <td>皮肤</td>
+            <td>{count('count:ship_skin')}</td>
+          </tr>
+          <tr>
+            <td>改造分支节点</td>
+            <td>{count('count:retrofit_node')}</td>
+          </tr>
+          <tr>
+            <td>获取方式条目</td>
+            <td>{count('count:ship_source')}</td>
+          </tr>
+        </tbody>
+      </table>
       <p className="note">
-        图鉴共 {meta.get('count:ship')} 艘船、{meta.get('count:ship_stage')} 条突破阶段行、
-        {meta.get('count:ship_skin')} 个皮肤。垂直切片阶段先渲染下面 {rendered.length} 艘的详情页，
-        其余路由在阶段 2 接上。
+        以上每一行都有对应的静态页：{ships.length} 个 <code>/ship/&lt;group_type&gt;/</code>。
+        页面由构建期的 <code>data/al.sqlite</code> 生成，运行时不查库。
       </p>
 
-      <h2>已渲染页面</h2>
+      <h2>数据边界</h2>
       <ul>
-        {rendered.map((s) => (
-          <li key={s.groupType}>
-            <Link href={`/ship/${s.groupType}/`}>{s.name}</Link>{' '}
-            <span className="note">group_type {s.groupType}</span>
-          </li>
-        ))}
+        <li>不托管游戏美术资源：立绘再分发授权未取得（PLAN §8.5），页面不出任何图片链接</li>
+        <li>1–100 级成长曲线按 ×1000 定点线性外推，取整规则待游戏内抽检校准（PLAN §3.7）</li>
+        <li>皮肤只标 CV，不标画师：解包数据里没有画师姓名字段（PLAN §8.2）</li>
       </ul>
-
-      <p className="warn">
-        本站不托管游戏美术资源：立绘再分发授权未取得（PLAN §8.5），图片位一律渲染占位块，
-        不产生任何指向图片的链接。
-      </p>
     </main>
   )
 }

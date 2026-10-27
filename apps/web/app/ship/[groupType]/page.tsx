@@ -2,19 +2,20 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { AttrCurve } from '../../../components/ship/attr-curve'
 import { openDb, readMeta } from '../../../lib/db'
-import { getShipPage } from '../../../lib/queries/ship'
-import { STAGE1_SHIPS } from '../../../lib/slice'
+import { getShipPage, listShips } from '../../../lib/queries/ship'
 
 /**
- * 阶段 1 的垂直切片页面。
+ * 舰船详情页。
  *
  * `generateStaticParams` 是产物文件数的唯一来源，`dynamicParams = false` 保证访问
- * 未预渲染的路径直接 404，绝不在运行时现生成。切片名单见 lib/slice.ts。
+ * 未预渲染的路径直接 404，绝不在运行时现生成。两者读同一份 `ship` 表，
+ * 所以「图鉴里有这条船」与「线上有这一页」是同一件事——CI 的路由覆盖守卫
+ * 就是拿库里的 count:ship 去比对 out/ 下的 HTML 数。
  */
 export const dynamicParams = false
 
 export function generateStaticParams(): Array<{ groupType: string }> {
-  return STAGE1_SHIPS.map((g) => ({ groupType: String(g) }))
+  return listShips(openDb()).map((s) => ({ groupType: String(s.groupType) }))
 }
 
 type Params = { groupType: string }
