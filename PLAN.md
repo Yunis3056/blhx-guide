@@ -1725,6 +1725,14 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 - 走 wrangler 直传产物时，Pages 项目的构建来源必须是 **Direct Upload**。如果同一仓库同时留着 Git 集成（Connected → 自动构建），两条链路会互相覆盖，症状是「线上页面不是刚部署的那一版」，且日志各说各话
 - 环境变量在 Pages 项目设置里配，只有一个名字：`NEXT_PUBLIC_IMG_BASE`。无图模式（§8.5）下留空即可——产物里根本不出 `<img>`
 
+**已选定通道 A：Actions 构建 + 直传**（`ci.yml` 的 `site` job 里，`github.ref == 'refs/heads/main'` 才跑的两步）：
+
+- 部署不另开 job，接在守卫后面复用同一份 `out/`——两次构建各出一份产物时，「检查过的」和「上线的」可能根本不是同一代
+- 需要仓库 Secrets 两项：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`。缺任何一步都当场以中文报错退出，不留下「跑绿了但其实没部署」的状态
+- `wrangler` 版本钉死（当前 4.153.0）：部署工具的漂移不该成为线上行为变化的原因
+- 部署后紧跟一步**线上自检**：`/ship/20502/` 必须 200、`/ship/99999/` 必须 404、线上 HTML 里必须含舰名。这三条都在守卫本地通过之后仍然可能因 Pages 侧失效而破裂（例如 minify 之外的改写、别名没切过来），只看 wrangler 报成功是不够的
+- `concurrency.cancel-in-progress` 按事件区分：PR 上取消旧提交，main 上绝不取消（半取消的直传会留下部分文件的新代）
+
 
 不含工期，只给依赖与验收。**排序原则：不依赖用户人力且已被数据证实的前置；依赖用户判断或来源未定位的后置。**
 
@@ -1750,7 +1758,7 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 | 通道 | 构建发生在 | 代价 |
 | --- | --- | --- |
 | 人工 `wrangler pages deploy` | 开发机 | 每次上线都要人跑一遍，做不到「上游更新 24 小时内自动跟进」（§6.5 的承诺） |
-| `ci.yml` 构建 + 直传 | GitHub Actions ubuntu-latest | 要把 Cloudflare 令牌存进仓库 Secrets；构建环境从 Pages 镜像换成 Actions 镜像，`node:sqlite` / `sharp` 要在新镜像里重测一次 |
+| `ci.yml` 构建 + 直传 **（2026-10-28 选定）** | GitHub Actions ubuntu-latest | 要把 Cloudflare 令牌存进仓库 Secrets；构建环境从 Pages 镜像换成 Actions 镜像，`node:sqlite` / `sharp` 要在新镜像里重测一次 |
 | Pages Git 集成（Connected） | Pages 自己的构建镜像 | 回到原命题：Pages Linux 镜像里 `node:sqlite` 与 `sharp` 的可用性未验；且 Root directory 必须留空为仓库根，填 `apps/web` 会跳过 emit 前置步骤（§4.6 的难察觉失败） |
 
 **Pages 默认开 HTML minify**：同一份 `out/ship/20502/index.html` 本地 47,712 字节，线上传回 44,826 字节；把两边都压掉标签间空白后逐字节相同（44,775）。所以「产物体积」有两个数，比对预算时要用线上数，而 §4.5 的守卫跑在本地 `out/` 上，留的余量天然覆盖这个差值。
