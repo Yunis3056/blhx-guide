@@ -1732,6 +1732,12 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 - 部署后紧跟一步**线上自检**：`/ship/20502/` 必须 200、`/ship/99999/` 必须 404、线上 HTML 里必须含舰名。这三条都在守卫本地通过之后仍然可能因 Pages 侧失效而破裂（例如 minify 之外的改写、别名没切过来），只看 wrangler 报成功是不够的
 - `concurrency.cancel-in-progress` 按事件区分：PR 上取消旧提交，main 上绝不取消（半取消的直传会留下部分文件的新代）
 
+首跑实测两件事值得记：
+
+- **基线**：ubuntu-latest + Node 24 上整个 job 63 秒（14 步：install → 四项检查 → 构建 → 三段守卫 → 直传 → 线上自检），产物 24 文件。`node:sqlite` 与 `sharp` 在这台机器上都不需要实验标志——原本挂在「Pages 构建镜像」上的那条待实测，随 Direct Upload 一起作废
+- **直传是内容寻址的**：同一份产物第二次部署报 `Uploaded 0 files (24 already uploaded)`、0.53 秒。所以「每次 push 都部署」的边际成本几乎只剩 Pages 侧换代，不是重传
+- **`pnpm/action-setup@v4` 不接受 `version` 输入**（当 `package.json` 已有 `packageManager` 时）：它会以 `ERR_PNPM_BAD_PM_VERSION` 直接退出，后面所有步骤 skip。版本口径只留 `packageManager` 一处
+
 
 不含工期，只给依赖与验收。**排序原则：不依赖用户人力且已被数据证实的前置；依赖用户判断或来源未定位的后置。**
 
@@ -1750,7 +1756,7 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 | 1.9 | 图片：1 艘船的 icon + 默认立绘 + 1 张换装，**skinId 精确 join** → sharp → LocalAdapter（**仅本地验证，不上线**） | 实测 `--limit=1`（group 10000）出 7 个产物、`--group=20502` 再 7 个，共 14 文件 992KB；全部 EN 命中、零降级；第二次跑同一艘船下载 0 张跳过 7 项 |
 | 1.10 | Next.js 脚手架 + `/ship/[groupType]`（**仅 1 艘**）+ §4.6 全部配置项 | 实测：`out/` 24 文件 953KB，详情页 HTML 47.7KB，首页 First Load JS 106KB；`/ship/99999/` 走 404；页面渲染 12 项属性表 + 12 张 1–100 端点图 + 5 个皮肤（含 CV）+ 12 条改造节点（中文 descrip，机器格式 effect 不入库展示）+ 舰级与科技点 + 3 条获取方式；构建期与浏览器双端零 console 错误 |
 | 1.11 | 部署 Pages（**无图版本**，立绘位置渲染占位块） | 实测：`wrangler pages project create blhx-guide` + `pages deploy apps/web/out` 直传 24 文件，3.46s 上传完成。线上 `https://blhx-guide.pages.dev/` 与 `/ship/20502/` 均 200，`/ship/99999/` 404；线上 HTML 里 `undefined/`、`/_next/image`、`<img>` 全部 0 命中 |
-| 1.12 | 冷构建实测：记录产物文件数、构建时长、`out/` 清单；确认 `node:sqlite` 是否需要 `NODE_OPTIONS=--experimental-sqlite`；确认 `sharp` 在构建镜像里的可用性 | 见下方「1.12 的口径随部署通道改变」 |
+| 1.12 | 冷构建实测：记录产物文件数、构建时长、`out/` 清单；确认 `node:sqlite` 是否需要 `NODE_OPTIONS=--experimental-sqlite`；确认 `sharp` 在构建镜像里的可用性 | **Actions Linux 基线已拿到**（通道 A 首跑）：整个 job 63 秒（install → typecheck → lint → test → build → 三段守卫 → 直传 → 线上自检，14 步全绿），产物 24 文件 / 4 个 HTML；`node:sqlite` 与 `sharp` 在 ubuntu-latest + Node 24 上都不需要任何实验标志。Pages 构建镜像那条路已随 Direct Upload 作废 |
 
 **Pages 侧的构建通道换了含义**：选定 wrangler 直传（Direct Upload）后，Pages 不再跑 `pnpm build`，所以原本挂在「Pages 构建镜像」上的两个待实测项（`node:sqlite` 是否需要显式标志、`sharp` 在 Pages Linux 的可用性）转移到了**真正执行构建的那台机器**上——目前是开发机（Windows + Node 24.21，两项都已实测可用），若接 GitHub Actions 就是 ubuntu-latest + Node 24。三条可选路径与代价：
 
