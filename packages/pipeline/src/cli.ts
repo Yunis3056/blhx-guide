@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { TABLES, assertSpec, relPath, type TableKey } from './tables.ts'
 import { STAGE1_TABLES, whitelistFor, STUB_PROBES } from './whitelist.ts'
 import { resolveSha, downloadTarball, fetchTree, extractWhitelist, readTable, topDir } from './fetch/fetch.ts'
+import { buildAttrMap, assertMatchesEnemy, assertArrayLength } from './normalize/attr-map.ts'
 
 const ROOT = join(import.meta.dirname!, '..', '..', '..')
 const RAW = join(ROOT, 'data', 'raw')
@@ -103,6 +104,22 @@ async function cmdValidate(): Promise<void> {
   }
   log('')
   log(`PASS：${rows.length} 张表全部通过目录、顶层类型、键策略与条目数下限断言`)
+
+  // 属性映射：由定义表生成，并与敌方具名字段交叉断言（§1.5）
+  const root = join(RAW, sha)
+  const map = buildAttrMap(root, sha)
+  assertMatchesEnemy(root, sha, map)
+  const stats = readTable(root, sha, relPath(TABLES.shipStats))
+  assertArrayLength(
+    map,
+    Object.values(stats as Record<string, Record<string, unknown>>),
+  )
+  log('')
+  log('属性位置映射（生成自 attribute_info_by_type，非硬编码）')
+  for (const a of map.attrs) {
+    log(`  [${String(a.index).padStart(2)}] ${a.name.padEnd(13)} ${a.label}  (id ${a.id})`)
+  }
+  log('PASS：与 enemy_data_statistics 具名字段键集一致；三个舰船数组定长 12 校验通过')
 }
 
 /**
