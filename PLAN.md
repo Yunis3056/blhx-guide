@@ -1186,10 +1186,20 @@ export function getSourcesForItem(itemId: number): ChapterSource[]
 | 最大单文件 | 50,358 B | < 25 MiB | 余量四个数量级 |
 | 单页 HTML | 22,948 – 50,358 B（中位 39,041） | < 60KB gzip | 最大一页 gzip **7,152 B**，余量 8.6× |
 | 单页 RSC 载荷 | 13,145 – 27,757 B（中位 21,036，gzip 2,941） | — | 只在客户端导航时取，不进首屏 |
-| 首屏 JS | 5 个 chunk / **139.0 KiB gzip** | < 170KB gzip | 通过，余量 18% |
+| 首屏 JS | 4 个 chunk / **100.3 KiB gzip**（`polyfills-*.js` 带 `noModule`，现代浏览器不取） | < 170KB gzip | 通过，余量 41%；与 Next 自己报的 First Load JS 102 kB 对上 |
 | 首屏 CSS | 1,389 B（gzip 683） | — | 无自定义字体 |
 
-首屏 JS 里 `polyfills-*.js` 单独占 39,627 B gzip（28%），是 170KB 线被逼近时第一个该动手的对象。**构建时长有两个数，必须分开记**：turbo 报 `web#build` 37 秒，同一命令的 shell 墙钟 356 秒——差值几乎全是 Windows 写 1,740 个小文件的 IO。CI 里守卫的是 Linux 的数，尚未跑过（待实测）。
+**首屏 JS 的口径要用对**：把 HTML 里所有 `<script src>` 加起来是 139.0 KiB gzip，其中 39.6 KiB 是 `polyfills-*.js`——它带 `noModule`，只给不支持 ES module 的浏览器，算进首屏就凭空多出一倍。**产物体积与首屏体积是两件事**：RSC 载荷 17.66 MiB 全在产物里，但一次页面访问取的是 HTML + 4 个 chunk。**构建时长要按「谁在计」分开记**（同一台 Windows 机、同一份数据）：
+
+| 口径 | 秒 | 说明 |
+|---|---|---|
+| `next build` 直接跑（不经 turbo） | **16.8** | 含 863 页生成与导出；`pipeline#emit` 另加 1.06 |
+| `turbo run build --force` 任务自报 | 17.0 | turbo 的 `Time:` 只算任务 |
+| `turbo run build --force` 墙钟 | **342** | 差值 325 秒全部落在任务报时之后 |
+| `turbo run build`（指纹未变，重放缓存） | 19 | 代价消失 |
+| CI `pnpm build`（Linux，冷、无缓存） | **23** | 取自 Actions 日志时间戳 |
+
+那 325 秒是 turbo 归档 `outputs = out/**` 的 1,740 个小文件：同一台机器上只归档 1 个文件的 `pipeline#emit`，墙钟比任务自报只多 0.3 秒。**所以本地墙钟不是构建成本**，上线看的数只有 CI 的 23 秒；本地的 5 分钟只在指纹变化那一次付，重放是 19 秒。产物文件数本地 1,740、CI 1,738，差 2 个——CI 的预算守卫现在把 html/txt/js/css 与最大单文件一起打出来，这个差值由明细对账，不靠猜。
 
 **国内体验措施**：
 
@@ -1292,12 +1302,12 @@ Output directory  apps/web/out
 
 | 项 | 值 |
 | --- | --- |
-| `node:sqlite` 在 `next build` 的预渲染进程里 | 可直接用，不需要 `--experimental-sqlite`；Pages Linux 镜像仍待 1.12 验 |
-| 首页 First Load JS | 106 kB（共享 chunk 102 kB） |
+| `node:sqlite` 在 `next build` 的预渲染进程里 | Windows 本机与 ubuntu-latest 都可直接用，不需要 `--experimental-sqlite`（CI 863 页全量预渲染跑绿） |
+| 首页 First Load JS | 102 kB（`/_not-found` 103 kB） |
 | 舰船详情页 HTML | 47.7 kB（12 张属性图 + 3 张表 + 页脚来源） |
 | 每条成长线的顶点数 | 2 个端点。按 1–100 逐点画线时同一页是 **298 kB**，859 页即 250MB+；公式对等级线性，端点即精确 |
-| 产物文件数（1 艘船切片） | 24 个文件 / 953KB，其中 HTML 4 个（`/`、`/404`、`/404/index`、`/ship/20502/`） |
-| 未预渲染路径 | `/ship/99999/` → 404，与 `dynamicParams = false` 一致 |
+| 产物文件数（859 页全量） | 本地 1,740 / CI 1,738，明细与两条口径见 §4.5 |
+| 未预渲染路径 | `/ship/99999/` → 404，与 `dynamicParams = false` 一致；线上同样返回 404 |
 | §4.6 的 ESLint 守卫 | 反证过：塞进 `export const runtime = 'edge'` 与 `cookies()` 各报一条错，而 `export const dynamicParams = false` 不被误杀 |
 
 构建期 `next build` 的类型检查保持开启（它在首跑就抓到一个真实错误：查询里取了不存在的 `label` 列）；ESLint 不在构建里重跑一遍，`apps/web/eslint.config.mjs` 继承根配置并追加守卫规则，由 `pnpm lint` 单独执行——两处都跑只会让同一个错误有两份日志。
@@ -1724,9 +1734,9 @@ jobs:
 
 - **静态导出守卫**：HTML 里 grep 不到 `/_next/image` 与 `undefined/`；`apps/web/app` 与 `apps/web/out` 目录不存在即失败（不写这条，`grep` 扫空目录会返回成功，给出「已守卫」的假象）。搜索范围只限 `*.html`，理由见 §4.6 的实测口径
 - **产物预算守卫**：文件数 < 18,000、单文件 < 25 MiB
-- **路由覆盖守卫**：从 `apps/web/lib/slice.ts` 读出这一版声明的路由，逐个断言 `out/ship/<groupType>/index.html` 存在——名单只有一处定义，首页链接列表与 `generateStaticParams` 都读它，避免「首页链到一个没渲染的路径」
+- **路由覆盖守卫**：`scripts/check-routes.mjs` 从 `data/al.sqlite` 的 `ship` 表取名单，逐个断言 `out/ship/<groupType>/index.html` 存在，并反向抓产物里库中没有的目录（§4.6）
 
-四条命令与三段脚本都在本机跑通过（当前产物 24 文件 / 4 个 HTML）。CI 里没有 `data/raw`，`pnpm build` 照样出全部产物，这正是 §4.6 那条「干净检出即可重建」的机器化形态。
+四条命令与三段脚本都在本机与 CI 跑通过（当前产物 1,740 文件 / 862 个 HTML / 859 条路由）。CI 里没有 `data/raw`，`pnpm build` 照样出全部产物，这正是 §4.6 那条「干净检出即可重建」的机器化形态。
 
 **部署通道（用户选定：wrangler + API Token，首个线上版本用 `*.pages.dev`）**：
 
@@ -1749,10 +1759,10 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 - 部署后紧跟一步**线上自检**：`/ship/20502/` 必须 200、`/ship/99999/` 必须 404、线上 HTML 里必须含舰名。这三条都在守卫本地通过之后仍然可能因 Pages 侧失效而破裂（例如 minify 之外的改写、别名没切过来），只看 wrangler 报成功是不够的
 - `concurrency.cancel-in-progress` 按事件区分：PR 上取消旧提交，main 上绝不取消（半取消的直传会留下部分文件的新代）
 
-首跑实测两件事值得记：
+这条链路上实测到的三件事：
 
-- **基线**：ubuntu-latest + Node 24 上整个 job 63 秒（14 步：install → 四项检查 → 构建 → 三段守卫 → 直传 → 线上自检），产物 24 文件。`node:sqlite` 与 `sharp` 在这台机器上都不需要实验标志——原本挂在「Pages 构建镜像」上的那条待实测，随 Direct Upload 一起作废
-- **直传是内容寻址的**：同一份产物第二次部署报 `Uploaded 0 files (24 already uploaded)`、0.53 秒。所以「每次 push 都部署」的边际成本几乎只剩 Pages 侧换代，不是重传
+- **基线**：ubuntu-latest + Node 24 上整个 job 75 秒（14 步：install → 四项检查 → 构建 → 三段守卫 → 直传 → 线上自检），其中 `pnpm build` 23 秒、直传 21 秒，产物 1,738 文件 / 859 条路由。`node:sqlite` 与 `sharp` 在这台机器上都不需要实验标志——原本挂在「Pages 构建镜像」上的那条待实测，随 Direct Upload 一起作废
+- **直传是内容寻址的**：同一份产物第二次部署报 `Uploaded 0 files (N already uploaded)`、0.53 秒。所以「每次 push 都部署」的边际成本几乎只剩 Pages 侧换代，不是重传
 - **`pnpm/action-setup@v4` 不接受 `version` 输入**（当 `package.json` 已有 `packageManager` 时）：它会以 `ERR_PNPM_BAD_PM_VERSION` 直接退出，后面所有步骤 skip。版本口径只留 `packageManager` 一处
 
 
@@ -1773,7 +1783,7 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 | 1.9 | 图片：1 艘船的 icon + 默认立绘 + 1 张换装，**skinId 精确 join** → sharp → LocalAdapter（**仅本地验证，不上线**） | 实测 `--limit=1`（group 10000）出 7 个产物、`--group=20502` 再 7 个，共 14 文件 992KB；全部 EN 命中、零降级；第二次跑同一艘船下载 0 张跳过 7 项 |
 | 1.10 | Next.js 脚手架 + `/ship/[groupType]`（**仅 1 艘**）+ §4.6 全部配置项 | 实测：`out/` 24 文件 953KB，详情页 HTML 47.7KB，首页 First Load JS 106KB；`/ship/99999/` 走 404；页面渲染 12 项属性表 + 12 张 1–100 端点图 + 5 个皮肤（含 CV）+ 12 条改造节点（中文 descrip，机器格式 effect 不入库展示）+ 舰级与科技点 + 3 条获取方式；构建期与浏览器双端零 console 错误 |
 | 1.11 | 部署 Pages（**无图版本**，立绘位置渲染占位块） | 实测：`wrangler pages project create blhx-guide` + `pages deploy apps/web/out` 直传 24 文件，3.46s 上传完成。线上 `https://blhx-guide.pages.dev/` 与 `/ship/20502/` 均 200，`/ship/99999/` 404；线上 HTML 里 `undefined/`、`/_next/image`、`<img>` 全部 0 命中 |
-| 1.12 | 冷构建实测：记录产物文件数、构建时长、`out/` 清单；确认 `node:sqlite` 是否需要 `NODE_OPTIONS=--experimental-sqlite`；确认 `sharp` 在构建镜像里的可用性 | **Actions Linux 基线已拿到**（通道 A 首跑）：整个 job 63 秒（install → typecheck → lint → test → build → 三段守卫 → 直传 → 线上自检，14 步全绿），产物 24 文件 / 4 个 HTML；`node:sqlite` 与 `sharp` 在 ubuntu-latest + Node 24 上都不需要任何实验标志。Pages 构建镜像那条路已随 Direct Upload 作废 |
+| 1.12 | 冷构建实测：记录产物文件数、构建时长、`out/` 清单；确认 `node:sqlite` 是否需要 `NODE_OPTIONS=--experimental-sqlite`；确认 `sharp` 在构建镜像里的可用性 | **Actions Linux 基线（通道 A，859 页全量）**：整条 job 75 秒、`pnpm build` 冷构建 23 秒，产物 1,738 文件（明细见 §4.5 与 §7 阶段 2）；`node:sqlite` 与 `sharp` 在 ubuntu-latest + Node 24 上都不需要任何实验标志——`sharp` 是被 `pnpm test` 里两条真实编码断言（体积硬失败、占位图比例）在 Linux 上跑绿的，`pipeline#images` 本身不在 CI 链路里。Pages 构建镜像那条路已随 Direct Upload 作废 |
 
 **Pages 侧的构建通道换了含义**：选定 wrangler 直传（Direct Upload）后，Pages 不再跑 `pnpm build`，所以原本挂在「Pages 构建镜像」上的两个待实测项（`node:sqlite` 是否需要显式标志、`sharp` 在 Pages Linux 的可用性）转移到了**真正执行构建的那台机器**上——目前是开发机（Windows + Node 24.21，两项都已实测可用），若接 GitHub Actions 就是 ubuntu-latest + Node 24。三条可选路径与代价：
 
@@ -1791,7 +1801,9 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 
 ### 阶段 2 · 舰船图鉴全量
 
-**2.1 全量预渲染（已跑通，D-verified 2026-10-28）**：`generateStaticParams` 从固定 1 艘改为读 `ship` 表全量 859 条，`lib/slice.ts`（手写名单）随之删除——名单只能有一个来源，否则 CI 守卫验的是「脚本里写了哪些」而不是「库里有哪些」。路由覆盖改用 `scripts/check-routes.mjs`（§4.6）。首页重写为总览：计数、快照代次与「数据边界」清单，不链接任何尚未渲染的路由。实测数字全部在 §4.5 的表里，其中两条推翻了我自己的推算：**产物文件数是路由数的两倍**（18,000 线等价于 ~8,900 路由），**共享 chunk 只有 18 个而不是 ~300 个**。构建时长 37 秒（turbo 口径）/ 356 秒（本地墙钟，Windows 写小文件）；Actions Linux 的数还没跑出来。
+**2.1 全量预渲染（已跑通，D-verified 2026-10-28）**：`generateStaticParams` 从固定 1 艘改为读 `ship` 表全量 859 条，`lib/slice.ts`（手写名单）随之删除——名单只能有一个来源，否则 CI 守卫验的是「脚本里写了哪些」而不是「库里有哪些」。路由覆盖改用 `scripts/check-routes.mjs`（§4.6）。首页重写为总览：计数、快照代次与「数据边界」清单，不链接任何尚未渲染的路由。实测数字全部在 §4.5 的表里，其中两条推翻了我自己的推算：**一条路由产出两个文件**（`index.html` + RSC `index.txt`，18,000 线等价于约 8,900 条路由），**共享 chunk 只有 18 个而不是 ~300 个**（且页数增长不影响首屏 JS）。
+
+CI 侧已在 run #3（`ef6301e`，通道 A）全绿核过：`产物文件数 1,738（Linux）/ 1,740（本地）`、`路由覆盖一致：图鉴 859 条 / 已渲染 859 页 / 首页在位`、直传 21 秒、`pnpm build` 冷构建 23 秒、整条 job 75 秒（含取机、装依赖、部署与线上自检）。线上按 `ship` 表抽样 8 页（10000 / 10329 / 20511 / 30512 / 40407 / 80204 / 1030003 / 1150006）全部 200，未渲染路径 404。
 
 - 扩至 859 条目 / 3,427 阶段行入库（表内阶段行 3,429，覆盖 860 个 skin_id，其中 2 行属孤儿 group 进隔离清单）/ 2,730 皮肤；落实正向枚举过滤（阶段 1 已跑通，见 §7 1.7 实测行）
 - 详情页完整：六维雷达、**1–100 级**属性曲线（含 `attrs_growth_extra`，见 §3.7）、突破表、装备位与效率、**技能名与描述文本**（buff 机制与触发数值不在范围，§8.2）、皮肤画廊、改造分支、舰队科技点、**语音文本**（B 档 `ship_skin_words`）、获取方式（含跳转文案）

@@ -66,10 +66,13 @@ jobs:
         run: |
           set -euo pipefail
           n=$(find apps/web/out -type f | wc -l)
-          echo "产物文件数 $n"
           [ "$n" -lt 18000 ] || { echo "::error::文件数超 18,000"; find apps/web/out -type d | head -40; exit 1; }
           big=$(find apps/web/out -type f -size +25M)
           [ -z "$big" ] || { echo "::error::单文件超 25 MiB：$big"; exit 1; }
+          # 明细打出来：18,000 这条线管的是「路由数 × 2」，只报总数看不出是不是
+          # html 与 RSC 载荷成对增长，也分不清构建机差异与产物真的变了
+          echo "产物文件数 $n（html $(find apps/web/out -name '*.html' | wc -l) · txt $(find apps/web/out -name '*.txt' | wc -l) · js $(find apps/web/out -name '*.js' | wc -l) · css $(find apps/web/out -name '*.css' | wc -l)）"
+          echo "产物体积 $(du -sh apps/web/out | cut -f1) · 最大单文件 $(find apps/web/out -type f -printf '%s %p\n' | sort -rn | head -1)"
 
       - name: 每个声明的路由都有 HTML
         run: node scripts/check-routes.mjs
@@ -103,6 +106,14 @@ jobs:
             sleep 5
           done
           [ "$code" = "200" ] || { echo "::error::线上详情页返回 $code"; exit 1; }
+          # 抽样名单取自 ship 表——generateStaticParams 读的是同一份。直传是 1,740 个
+          # 文件的批量上传，只验一页排除不了「部分文件没落上新代」，所以按序取五个位置
+          samples=$(node -e "const{DatabaseSync}=require('node:sqlite');const d=new DatabaseSync('data/al.sqlite',{readOnly:true});const a=d.prepare('SELECT group_type FROM ship ORDER BY group_type').all().map(r=>r.group_type);console.log([0,0.25,0.5,0.75,1].map(f=>a[Math.round(f*(a.length-1))]).join(' '))")
+          for g in $samples; do
+            c=$(curl -s -o /dev/null -w '%{http_code}' "https://blhx-guide.pages.dev/ship/$g/")
+            [ "$c" = "200" ] || { echo "::error::线上 /ship/$g/ 返回 $c"; exit 1; }
+          done
+          echo "线上抽样通过：$samples"
           missing=$(curl -s -o /dev/null -w '%{http_code}' https://blhx-guide.pages.dev/ship/99999/)
           [ "$missing" = "404" ] || { echo "::error::未预渲染路径返回 $missing，dynamicParams 失效"; exit 1; }
           html=$(curl -s https://blhx-guide.pages.dev/ship/20502/)
