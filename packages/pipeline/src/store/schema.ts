@@ -9,7 +9,7 @@
  * 「某一项属性随突破的变化」，窄表直接按 attr 名取，不必知道它在数组第几位。
  */
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 export const DDL = `
 PRAGMA page_size = 4096;
@@ -31,6 +31,21 @@ CREATE TABLE attr_def (
   attr_id INTEGER NOT NULL UNIQUE,
   name  TEXT NOT NULL UNIQUE,
   label TEXT NOT NULL
+);
+
+-- 六维雷达的六个位置各自是哪一项属性。顺序**不是** attr_def 的 1..6：
+-- 构建期按 856 条船的实测相关性逐位取 |Spearman| 最大项，六个必须互不相同，
+-- 任一位置换人即中止（见 normalize/hexagon.ts）。
+CREATE TABLE hexagon_axis (
+  pos   INTEGER PRIMARY KEY,
+  attr  TEXT NOT NULL REFERENCES attr_def(name),
+  label TEXT NOT NULL
+);
+
+CREATE TABLE equip_kind (
+  type_id    INTEGER PRIMARY KEY,
+  type_name  TEXT NOT NULL,
+  type_name2 TEXT NOT NULL
 );
 
 CREATE TABLE rarity (
@@ -57,7 +72,8 @@ CREATE TABLE ship (
   default_skin_id INTEGER,
   skin_count      INTEGER NOT NULL,
   has_retrofit    INTEGER NOT NULL,
-  fleet_class_id  INTEGER
+  fleet_class_id  INTEGER,
+  hexagon         TEXT NOT NULL
 );
 CREATE INDEX ship_filter ON ship (nationality, ship_type, rarity, handbook_type);
 CREATE INDEX ship_name ON ship (name);
@@ -84,6 +100,31 @@ CREATE TABLE ship_stage_attr (
   growth_extra REAL  NOT NULL,
   PRIMARY KEY (group_type, stage, attr)
 );
+
+-- 装备位：槽位号 1..5 与「这一位允许哪些装备类型」。槽位含义随舰种变（实测
+-- 槽 1 可为舰炮/防空炮/战斗机/鱼雷…，槽 4/5 只出设备/反潜机/直升机/货物），
+-- 所以页面按可装类型显示，不给槽位起固定名字。
+CREATE TABLE ship_stage_slot (
+  group_type INTEGER NOT NULL REFERENCES ship(group_type),
+  stage      INTEGER NOT NULL,
+  slot       INTEGER NOT NULL,
+  kinds      TEXT NOT NULL,
+  PRIMARY KEY (group_type, stage, slot)
+);
+
+-- 技能名与描述：阶段行的 buff_list_display 逐条解析到 skill_data_template。
+-- 实测 9,239 项全部命中，零未解析，所以这里用外键级约束而不是宽松文本。
+CREATE TABLE ship_skill (
+  group_type INTEGER NOT NULL REFERENCES ship(group_type),
+  stage      INTEGER NOT NULL,
+  seq        INTEGER NOT NULL,
+  skill_id   INTEGER NOT NULL,
+  name       TEXT NOT NULL,
+  descr      TEXT NOT NULL,
+  skill_type INTEGER NOT NULL,
+  PRIMARY KEY (group_type, stage, seq)
+);
+CREATE INDEX skill_ship ON ship_skill (group_type, stage);
 
 CREATE TABLE ship_skin (
   skin_id     INTEGER PRIMARY KEY,

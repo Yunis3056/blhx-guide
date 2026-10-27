@@ -8,8 +8,8 @@
   "files": {
     "ships.jsonl.gz": {
       "rows": 859,
-      "bytes": 37348,
-      "sha256": "236ac2ca4087db42ac646162f5b42d04c8100c7a0e76600359853b3d5c953bad"
+      "bytes": 39818,
+      "sha256": "41d5e79454d7c6d8aee09b523ed14ca888a4b8c2ac5be9ae0203ecf3916d9992"
     },
     "ship-stages.jsonl.gz": {
       "rows": 3427,
@@ -20,6 +20,16 @@
       "rows": 2730,
       "bytes": 67553,
       "sha256": "fc4997d0594aa5afdca3f0a26faaa820cf3adfc53258499d633ffafdd293e146"
+    },
+    "ship-slots.jsonl.gz": {
+      "rows": 17135,
+      "bytes": 48007,
+      "sha256": "25cd3d8f9af5d0952f6d7366e703ae71f4eb5cb3d1ea334617f38e733d3ade01"
+    },
+    "ship-skills.jsonl.gz": {
+      "rows": 9239,
+      "bytes": 185531,
+      "sha256": "8dc3335f3910837b2b32eaa727450f0dc063762d092990070f220b290b25a16a"
     },
     "ship-retrofits.jsonl.gz": {
       "rows": 106,
@@ -32,9 +42,9 @@
       "sha256": "50fbded63e22d2477cb14e0c55991ef3e74d30da7eb954c8c2b6d726c7567ad3"
     },
     "enums.jsonl.gz": {
-      "rows": 67,
-      "bytes": 1297,
-      "sha256": "a4edb27bcea8ae57f3e5cf279b32bd27636ec36af81938c41b64daac21fc3981"
+      "rows": 92,
+      "bytes": 1589,
+      "sha256": "d0113c617058fb6354b0d2527824ed6616fa1cd12b20c9f8e3c94acfbb37f57e"
     }
   },
   "tableDirs": {

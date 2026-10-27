@@ -1,4 +1,5 @@
 import type { AttrMap } from './attr-map.ts'
+import type { HexagonAxis } from './hexagon.ts'
 import type { ShipRarity } from '../display/rarity.ts'
 import type { FactionEntry } from '../display/factions.ts'
 
@@ -16,6 +17,8 @@ export type EnumRow =
   | { kind: 'rarity'; value: number; label: string }
   | { kind: 'hull'; typeId: number; typeName: string; teamType: string }
   | { kind: 'faction'; nationality: number; slug: string; name: string; source: string }
+  | { kind: 'equipKind'; typeId: number; typeName: string; typeName2: string }
+  | { kind: 'hexagonAxis'; pos: number; attr: string; label: string }
 
 export function buildEnumRows(
   attrMap: AttrMap,
@@ -23,6 +26,8 @@ export function buildEnumRows(
   hulls: ReadonlyMap<number, { typeName: string; teamType: string }>,
   factions: readonly FactionEntry[],
   factionNames: ReadonlyMap<number, string>,
+  equipKinds: ReadonlyMap<number, { typeName: string; typeName2: string }>,
+  hexagonAxes: readonly HexagonAxis[],
 ): { rows: EnumRow[]; counts: Record<EnumRow['kind'], number> } {
   const attrs: EnumRow[] = attrMap.attrs.map((a) => ({
     kind: 'attr',
@@ -45,9 +50,25 @@ export function buildEnumRows(
       name: factionNames.get(f.nationality) ?? f.name,
       source: f.source,
     }))
-  const rows = [...attrs, ...rarity, ...hull, ...faction]
+  const equip: EnumRow[] = [...equipKinds.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([typeId, v]) => ({ kind: 'equipKind', typeId, typeName: v.typeName, typeName2: v.typeName2 }))
+  // 六维轴只有 6 条，但它是「雷达六个位置各是什么属性」的唯一口径来源：
+  // 页面不许自己按 attr id 顺序摆，那个顺序实测是错的
+  const hexagon: EnumRow[] = hexagonAxes
+    .slice()
+    .sort((a, b) => a.pos - b.pos)
+    .map((a) => ({ kind: 'hexagonAxis', pos: a.pos, attr: a.attr, label: a.label }))
+  const rows = [...attrs, ...rarity, ...hull, ...faction, ...equip, ...hexagon]
   return {
     rows,
-    counts: { attr: attrs.length, rarity: rarity.length, hull: hull.length, faction: faction.length },
+    counts: {
+      attr: attrs.length,
+      rarity: rarity.length,
+      hull: hull.length,
+      faction: faction.length,
+      equipKind: equip.length,
+      hexagonAxis: hexagon.length,
+    },
   }
 }

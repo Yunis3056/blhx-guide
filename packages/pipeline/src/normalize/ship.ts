@@ -3,6 +3,7 @@ import { readTable } from '../fetch/fetch.ts'
 import { toNamed, type AttrMap } from './attr-map.ts'
 import { groupStageRows, isStageRow, readShipRows, stageIndexOf } from './stage-rows.ts'
 import { resolveName, type NameCodeMap } from './name-code.ts'
+import { parseHexagon } from './hexagon.ts'
 import type { FactionEntry } from '../display/factions.ts'
 
 /**
@@ -52,6 +53,25 @@ export interface ShipRecord {
   sources: ShipSource[]
   retrofit: boolean
   fleetTechClassId: number | null
+  /** 六维雷达的六个字母，顺序按 hexagon_axis 表登记的轴名读，不是属性 id 顺序 */
+  hexagon: string[]
+}
+
+export interface ShipSlotRecord {
+  groupType: number
+  stage: number
+  slot: number
+  kinds: number[]
+}
+
+export interface ShipSkillRecord {
+  groupType: number
+  stage: number
+  seq: number
+  skillId: number
+  name: string
+  descr: string
+  skillType: number
 }
 
 export interface ShipStageRecord {
@@ -94,6 +114,8 @@ export interface ShipInput {
   fleetTechClassByGroup: Map<number, number>
   /** 舰级的 nation 与舰船 nationality 是两条独立证据，实测 726/726 相等；分叉即口径变了 */
   fleetTechClassNationByGroup: Map<number, number>
+  /** 装备类型枚举（equip_data_by_type 的键）：槽位里出现没登记过的类型即上游改了口径 */
+  equipKindIds: Set<number>
 }
 
 function dict(root: string, sha: string, key: keyof typeof TABLES): Record<string, Record<string, unknown>> {
@@ -140,6 +162,8 @@ export function buildShipRecords(root: string, sha: string, input: ShipInput): {
   ships: ShipRecord[]
   stages: ShipStageRecord[]
   skins: ShipSkinRecord[]
+  slots: ShipSlotRecord[]
+  skills: ShipSkillRecord[]
   quarantine: QuarantineEntry[]
 } {
   const groups = dict(root, sha, 'shipGroup')
@@ -147,6 +171,8 @@ export function buildShipRecords(root: string, sha: string, input: ShipInput): {
   const hullTypes = dict(root, sha, 'shipByType')
   const voiceActors = dict(root, sha, 'voiceActorCN')
   const transRows = dict(root, sha, 'shipTrans')
+  const tplRows = dict(root, sha, 'shipTemplate')
+  const skillDict = dict(root, sha, 'skillTemplate')
 
   const problems: string[] = []
   const quarantine: QuarantineEntry[] = []
@@ -196,6 +222,8 @@ export function buildShipRecords(root: string, sha: string, input: ShipInput): {
   for (const s of skins) skinToGroup.set(s.skinId, s.groupType)
 
   const stages: ShipStageRecord[] = []
+  const slots: ShipSlotRecord[] = []
+  const skills: ShipSkillRecord[] = []
   const rarityByGroup = new Map<number, number>()
   const englishByGroup = new Map<number, string>()
   // 图鉴白名单：阶段行按表切是 3,429 行 / 860 个 skin_id，但其中 skin 900424 的
@@ -227,11 +255,12 @@ export function buildShipRecords(root: string, sha: string, input: ShipInput): {
     for (const r of rows) {
       if (r.english_name && !englishByGroup.has(groupType)) englishByGroup.set(groupType, r.english_name)
       const named = (a: readonly number[] | undefined): Record<string, number> => toNamed(input.attrMap, a)
+      const stage = stageIndexOf(r)
       stages.push({
         rowId: r.id,
         skinId,
         groupType,
-        stage: stageIndexOf(r),
+        stage,
         star: r.star,
         rarity: rarity as number,
         armorType: r.armor_type,
@@ -240,6 +269,61 @@ export function buildShipRecords(root: string, sha: string, input: ShipInput): {
         attrsGrowthExtra: named(r.attrs_growth_extra),
         defaultEquipList: r.default_equip_list ?? [],
         fixEquipList: r.fix_equip_list ?? [],
+      })
+
+      // 装备位与技能都挂在同一 id 的 ship_data_template 行上（阶段行 id 就是 skin_id + 阶段号）
+      const tpl = tplRows[String(r.id)]
+      if (tpl === undefined) {
+        problems.push(`阶段行 ${r.id}（group ${groupType} 突破${stage}）不在 ship_data_template 里，装备位与技能无从取`)
+        continue
+      }
+      for (let slot = 1; slot <= 5; slot++) {
+        const raw = tpl[`equip_${slot}`]
+        if (!Array.isArray(raw)) {
+          problems.push(`group ${groupType} 突破${stage} 的 equip_${slot} 不是数组（实测恒为数组）`)
+          continue
+        }
+        const kinds: number[] = []
+        for (const k of raw) {
+          if (typeof k !== 'number') {
+            problems.push(`group ${groupType} 突破${stage} 槽 ${slot} 有非数字装备类型 ${JSON.stringify(k)}`)
+            continue
+          }
+          if (!input.equipKindIds.has(k)) {
+            problems.push(`group ${groupType} 突破${stage} 槽 ${slot} 的装备类型 ${k} 不在 equip_data_by_type 里（正向枚举被破坏，不猜它是什么）`)
+            continue
+          }
+          kinds.push(k)
+        }
+        kinds.sort((a, b) => a - b)
+        slots.push({ groupType, stage, slot, kinds })
+      }
+      const display = tpl['buff_list_display']
+      if (!Array.isArray(display)) {
+        problems.push(`group ${groupType} 突破${stage} 的 buff_list_display 不是数组`)
+        continue
+      }
+      display.forEach((rawId, i) => {
+        const skillId = typeof rawId === 'number' ? rawId : Number.NaN
+        const s = skillDict[String(skillId)]
+        if (s === undefined) {
+          problems.push(`group ${groupType} 突破${stage} 的技能 ${String(rawId)} 不在 skill_data_template（实测 9,239 项全命中，出现未命中即口径变了）`)
+          return
+        }
+        const name = resolveName(String(s.name ?? ''), input.nameCode)
+        const descr = resolveName(String(s.desc ?? ''), input.nameCode)
+        for (const miss of name.misses.concat(descr.misses)) {
+          problems.push(`group ${groupType} 技能 ${skillId} 的占位 ${miss} 在 name_code 里查不到`)
+        }
+        skills.push({
+          groupType,
+          stage,
+          seq: i + 1,
+          skillId,
+          name: name.text,
+          descr: descr.text,
+          skillType: typeof s.type === 'number' ? s.type : -1,
+        })
       })
     }
   }
@@ -287,6 +371,11 @@ export function buildShipRecords(root: string, sha: string, input: ShipInput): {
       })
     }
     const title = resolveName(String(def.name ?? ''), input.nameCode).text
+    const hexagon = parseHexagon(g.property_hexagon)
+    if (hexagon === null) {
+      problems.push(`group ${groupType}: property_hexagon 不是「6 个取自 S/A/B/C/D/E 的字母」（实测 859 条全满足）`)
+      continue
+    }
     const rarity = rarityByGroup.get(groupType) ?? null
     ships.push({
       groupType,
@@ -308,6 +397,7 @@ export function buildShipRecords(root: string, sha: string, input: ShipInput): {
       sources: parseSources(groupType, g.description),
       retrofit: transRows[String(groupType)] !== undefined,
       fleetTechClassId: input.fleetTechClassByGroup.get(groupType) ?? null,
+      hexagon,
     })
   }
 
@@ -317,6 +407,8 @@ export function buildShipRecords(root: string, sha: string, input: ShipInput): {
   ships.sort((a, b) => a.groupType - b.groupType)
   stages.sort((a, b) => a.rowId - b.rowId)
   skins.sort((a, b) => a.skinId - b.skinId)
+  slots.sort((a, b) => a.groupType - b.groupType || a.stage - b.stage || a.slot - b.slot)
+  skills.sort((a, b) => a.groupType - b.groupType || a.stage - b.stage || a.seq - b.seq)
   quarantine.sort((a, b) => (a.kind + a.key).localeCompare(b.kind + b.key))
-  return { ships, stages, skins, quarantine }
+  return { ships, stages, skins, slots, skills, quarantine }
 }

@@ -18,6 +18,7 @@ import { buildShipRecords } from './normalize/ship.ts'
 import { buildRetrofits } from './normalize/retrofit.ts'
 import { buildFleetTech } from './normalize/fleet-tech.ts'
 import { buildEnumRows } from './normalize/enums.ts'
+import { deriveHexagonAxes } from './normalize/hexagon.ts'
 import { writeJsonl } from './normalize/jsonl.ts'
 import { readManifest, writeManifest, assertSameGeneration, type ManifestFileEntry } from './manifest.ts'
 
@@ -322,7 +323,12 @@ function cmdNormalize(argv: string[]): void {
     if (!/^\d+$/.test(k)) continue
     hulls.set(Number(k), { typeName: String(v.type_name), teamType: String(v.team_type) })
   }
-  const enums = buildEnumRows(attrMap, shipRarity, hulls, factions, factionNames)
+  const equipRaw = readTable(root, sha, relPath(TABLES.equipByType)) as Record<string, { type_name?: string; type_name2?: string }>
+  const equipKinds = new Map<number, { typeName: string; typeName2: string }>()
+  for (const [k, v] of Object.entries(equipRaw)) {
+    if (!/^\d+$/.test(k)) continue // 'all' 这类汇总键
+    equipKinds.set(Number(k), { typeName: String(v.type_name ?? ''), typeName2: String(v.type_name2 ?? '') })
+  }
 
   const fleet = buildFleetTech(root, sha)
   const built = buildShipRecords(root, sha, {
@@ -333,13 +339,34 @@ function cmdNormalize(argv: string[]): void {
     nameCode,
     fleetTechClassByGroup: fleet.classByGroup,
     fleetTechClassNationByGroup: fleet.classNationByGroup,
+    equipKindIds: new Set(equipKinds.keys()),
   })
+
+  // 六维轴名不写死：拿每条船最高阶段行的 12 项属性与它的六个字母做相关，逐位取最大项
+  const bestAttrs = new Map<number, { stage: number; attrs: Record<string, number> }>()
+  for (const s of built.stages) {
+    const cur = bestAttrs.get(s.groupType)
+    if (cur === undefined || s.stage > cur.stage) bestAttrs.set(s.groupType, { stage: s.stage, attrs: s.attrs })
+  }
+  const hexagonSamples = built.ships
+    .map((ship) => ({ groupType: ship.groupType, letters: ship.hexagon, attrs: bestAttrs.get(ship.groupType)?.attrs ?? {} }))
+    .filter((s) => Object.keys(s.attrs).length > 0)
+  const hexagonAxes = deriveHexagonAxes(
+    hexagonSamples,
+    attrMap.attrs.map((a) => a.name),
+    new Map(attrMap.attrs.map((a) => [a.name, a.label])),
+  )
+
+  const enums = buildEnumRows(attrMap, shipRarity, hulls, factions, factionNames, equipKinds, hexagonAxes)
+
   const retrofits = buildRetrofits(root, sha)
 
   const files = [
     { name: 'ships.jsonl.gz', rows: built.ships },
     { name: 'ship-stages.jsonl.gz', rows: built.stages },
     { name: 'ship-skins.jsonl.gz', rows: built.skins },
+    { name: 'ship-slots.jsonl.gz', rows: built.slots },
+    { name: 'ship-skills.jsonl.gz', rows: built.skills },
     { name: 'ship-retrofits.jsonl.gz', rows: retrofits },
     { name: 'fleet-tech.jsonl.gz', rows: fleet.rows },
     { name: 'enums.jsonl.gz', rows: enums.rows },
@@ -374,6 +401,10 @@ function cmdNormalize(argv: string[]): void {
     ['enum-rarity', enums.counts.rarity, 5],
     ['enum-hull', enums.counts.hull, 21],
     ['enum-faction', enums.counts.faction, 29],
+    ['enum-equip-kind', enums.counts.equipKind, 19],
+    ['enum-hexagon-axis', enums.counts.hexagonAxis, 6],
+    ['ship-slots', built.slots.length, 17135],
+    ['ship-skills', built.skills.length, 9239],
   ]
   log(`归一化 ${sha.slice(0, 12)} → data/normalized/`)
   for (const b of baselines) {
@@ -386,10 +417,11 @@ function cmdNormalize(argv: string[]): void {
   const groups = new Set(built.ships.map((s) => s.groupType))
   const orphanSkins = built.skins.filter((s) => !groups.has(s.groupType)).length
   log(`  舰船无稀有度 ${noRarity} · 无阵营名 ${noFaction} · 孤儿皮肤 ${orphanSkins}（孤儿只登记不建页）`)
+  log(`  六维轴定位（相关取最大项，非属性 id 顺序）：${hexagonAxes.map((a) => `${a.pos}=${a.label}`).join(' ')}`)
   log(`  隔离清单 ${quarantineFile.rows} 条 → reports/quarantine.jsonl.gz`)
   for (const w of written) log(`  ${w.file.padEnd(26)} ${String(w.rows).padStart(5)} 行  ${(w.bytes / 1024).toFixed(1)} KB gz`)
   log(`  manifest.json：seq ${seq} · ${written.length} 个 jsonl 的 sha256 已登记`)
-  if (process.exitCode !== 1) log('PASS：三层 + 改造 + 舰队科技落盘，join 断言全通过')
+  if (process.exitCode !== 1) log('PASS：三层 + 技能 + 装备位 + 改造 + 舰队科技落盘，join 断言全通过')
 }
 
 /**

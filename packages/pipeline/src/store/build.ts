@@ -3,7 +3,7 @@ import { gunzipSync } from 'node:zlib'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { DDL, SCHEMA_VERSION } from './schema.ts'
-import type { ShipRecord, ShipStageRecord, ShipSkinRecord } from '../normalize/ship.ts'
+import type { ShipRecord, ShipStageRecord, ShipSkinRecord, ShipSlotRecord, ShipSkillRecord } from '../normalize/ship.ts'
 import type { RetrofitRecord } from '../normalize/retrofit.ts'
 import type { FleetTechRow } from '../normalize/fleet-tech.ts'
 import type { EnumRow } from '../normalize/enums.ts'
@@ -24,6 +24,8 @@ export const FILES = {
   ships: 'ships.jsonl.gz',
   stages: 'ship-stages.jsonl.gz',
   skins: 'ship-skins.jsonl.gz',
+  slots: 'ship-slots.jsonl.gz',
+  skills: 'ship-skills.jsonl.gz',
   retrofits: 'ship-retrofits.jsonl.gz',
   fleetTech: 'fleet-tech.jsonl.gz',
   enums: 'enums.jsonl.gz',
@@ -50,12 +52,16 @@ interface Dataset {
   ships: ShipRecord[]
   stages: ShipStageRecord[]
   skins: ShipSkinRecord[]
+  slots: ShipSlotRecord[]
+  skills: ShipSkillRecord[]
   retrofits: RetrofitRecord[]
   fleet: FleetTechRow[]
   attrs: Array<Extract<EnumRow, { kind: 'attr' }>>
   rarities: Array<Extract<EnumRow, { kind: 'rarity' }>>
   hulls: Array<Extract<EnumRow, { kind: 'hull' }>>
   factions: Array<Extract<EnumRow, { kind: 'faction' }>>
+  equipKinds: Array<Extract<EnumRow, { kind: 'equipKind' }>>
+  hexagonAxes: Array<Extract<EnumRow, { kind: 'hexagonAxis' }>>
 }
 
 /** 插入顺序 = 外键依赖顺序：先枚举与 ship，再一切引用它们的表 */
@@ -65,6 +71,12 @@ function insertAll(db: DatabaseSync, d: Dataset): number {
 
   const insAttr = db.prepare('INSERT INTO attr_def (idx, attr_id, name, label) VALUES (?,?,?,?)')
   for (const a of d.attrs) insAttr.run(a.idx, a.attrId, a.name, a.label)
+
+  const insHexAxis = db.prepare('INSERT INTO hexagon_axis (pos, attr, label) VALUES (?,?,?)')
+  for (const x of d.hexagonAxes) insHexAxis.run(x.pos, x.attr, x.label)
+
+  const insEquipKind = db.prepare('INSERT INTO equip_kind (type_id, type_name, type_name2) VALUES (?,?,?)')
+  for (const e of d.equipKinds) insEquipKind.run(e.typeId, e.typeName, e.typeName2)
 
   const insRarity = db.prepare('INSERT INTO rarity (value, label) VALUES (?,?)')
   for (const r of d.rarities) insRarity.run(r.value, r.label)
@@ -78,14 +90,14 @@ function insertAll(db: DatabaseSync, d: Dataset): number {
   )
   const insShip = db.prepare(
     `INSERT INTO ship (group_type, name, english_name, code, index_id, handbook_type, nationality,
-                       ship_type, rarity, default_skin_id, skin_count, has_retrofit, fleet_class_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                       ship_type, rarity, default_skin_id, skin_count, has_retrofit, fleet_class_id, hexagon)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   )
   for (const s of d.ships) {
     insShip.run(
       s.groupType, s.name, s.englishName, s.code, s.indexId, s.handbookType, s.nationality, s.shipType,
       s.rarity, s.defaultSkinId, s.skinCount, retrofitSet.has(s.groupType) ? 1 : 0,
-      classByGroup.get(s.groupType) ?? null,
+      classByGroup.get(s.groupType) ?? null, s.hexagon.join(','),
     )
   }
 
@@ -113,6 +125,12 @@ function insertAll(db: DatabaseSync, d: Dataset): number {
   }
 
   const shipSet = new Set(d.ships.map((s) => s.groupType))
+  const insSlot = db.prepare('INSERT INTO ship_stage_slot (group_type, stage, slot, kinds) VALUES (?,?,?,?)')
+  for (const sl of d.slots) insSlot.run(sl.groupType, sl.stage, sl.slot, json(sl.kinds))
+
+  const insSkill = db.prepare('INSERT INTO ship_skill (group_type, stage, seq, skill_id, name, descr, skill_type) VALUES (?,?,?,?,?,?,?)')
+  for (const sk of d.skills) insSkill.run(sk.groupType, sk.stage, sk.seq, sk.skillId, sk.name, sk.descr, sk.skillType)
+
   const insSkin = db.prepare('INSERT INTO ship_skin (skin_id, group_type, name, skin_type, painting, voice_actor) VALUES (?,?,?,?,?,?)')
   const insOrphan = db.prepare('INSERT INTO orphan_skin (skin_id, group_type, name, reason) VALUES (?,?,?,?)')
   let orphans = 0
@@ -174,7 +192,8 @@ function insertAll(db: DatabaseSync, d: Dataset): number {
 }
 
 const TABLES = [
-  'faction', 'attr_def', 'rarity', 'hull_type', 'ship', 'ship_stage', 'ship_stage_attr', 'ship_skin',
+  'faction', 'attr_def', 'hexagon_axis', 'rarity', 'hull_type', 'equip_kind', 'ship', 'ship_stage',
+  'ship_stage_attr', 'ship_stage_slot', 'ship_skill', 'ship_skin',
   'orphan_skin', 'ship_source', 'retrofit', 'retrofit_node', 'fleet_tech_group', 'fleet_tech_node',
   'fleet_tech_node_add', 'fleet_tech_ship',
 ] as const
@@ -183,6 +202,8 @@ export function buildDatabase(normalizedDir: string, outPath: string, dataSha: s
   const ships = readJsonl<ShipRecord>(normalizedDir, FILES.ships)
   const stages = readJsonl<ShipStageRecord>(normalizedDir, FILES.stages)
   const skins = readJsonl<ShipSkinRecord>(normalizedDir, FILES.skins)
+  const slots = readJsonl<ShipSlotRecord>(normalizedDir, FILES.slots)
+  const skills = readJsonl<ShipSkillRecord>(normalizedDir, FILES.skills)
   const retrofits = readJsonl<RetrofitRecord>(normalizedDir, FILES.retrofits)
   const fleet = readJsonl<FleetTechRow>(normalizedDir, FILES.fleetTech)
   const enums = readJsonl<EnumRow>(normalizedDir, FILES.enums)
@@ -195,12 +216,16 @@ export function buildDatabase(normalizedDir: string, outPath: string, dataSha: s
     ships,
     stages,
     skins,
+    slots,
+    skills,
     retrofits,
     fleet,
     attrs: enums.filter((e) => e.kind === 'attr'),
     rarities: enums.filter((e) => e.kind === 'rarity'),
     hulls: enums.filter((e) => e.kind === 'hull'),
     factions: enums.filter((e) => e.kind === 'faction'),
+    equipKinds: enums.filter((e) => e.kind === 'equipKind'),
+    hexagonAxes: enums.filter((e) => e.kind === 'hexagonAxis'),
   }
 
   // 一个事务包全部插入：逐条自动提交时 4 万行属性写要跑几分钟（每条一次落盘同步），

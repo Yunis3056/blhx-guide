@@ -103,6 +103,43 @@ test('§4.3 的读路径逐条可查', { skip }, () => {
       get<{ name: string }>(db, 'SELECT name FROM ship_skin WHERE group_type = 20502 AND skin_type = -1').name,
       '厌战',
     )
+
+    // 技能：阶段行的 buff_list_display 解析到 skill_data_template 的名字与描述
+    assert.deepEqual(
+      db.prepare('SELECT name FROM ship_skill WHERE group_type = 20502 AND stage = 1 ORDER BY seq').all().map((r) => r.name),
+      ['神射手', '皇家传奇'],
+    )
+    // 技能确实按突破阶段存：卡辛 1–3 阶段是「全弹发射I」，突破 4 换成「全弹发射II」，
+    // 写成按船一条就会把 573 艘船的升级丢掉（实测 859 船里 573 船的阶段间列表不同）
+    assert.deepEqual(
+      db
+        .prepare('SELECT stage, name FROM ship_skill WHERE group_type = 10103 AND seq = 3 ORDER BY stage')
+        .all()
+        .map((r) => `${r.stage}:${r.name}`),
+      ['1:全弹发射I', '2:全弹发射I', '3:全弹发射I', '4:全弹发射II'],
+    )
+
+    // 装备位：槽位号 + 可装类型，类型名从 equip_kind 回读（type_name2 才分舰种）
+    assert.deepEqual(
+      db
+        .prepare(
+          `SELECT s.slot, k.type_name2 FROM ship_stage_slot s
+           JOIN json_each(s.kinds) j ON 1=1
+           JOIN equip_kind k ON k.type_id = j.value
+           WHERE s.group_type = 20502 AND s.stage = 4 ORDER BY s.slot, k.type_id`,
+        )
+        .all()
+        .map((r) => `${r.slot}:${r.type_name2}`),
+      ['1:舰炮(战列)', '2:舰炮(驱逐)', '2:舰炮(轻巡)', '3:防空炮', '3:防空炮', '4:设备', '5:设备'],
+    )
+
+    // 六维：轴名由构建期相关性定位，实测第 1 位是炮击而不是属性 id 顺序里的耐久；
+    // 厌战作为战列炮击 S / 耐久 A、雷击航空 E，与游戏内表现一致
+    assert.deepEqual(
+      db.prepare('SELECT label FROM hexagon_axis ORDER BY pos').all().map((r) => r.label),
+      ['炮击', '雷击', '航空', '机动', '防空', '耐久'],
+    )
+    assert.equal(get<{ hexagon: string }>(db, 'SELECT hexagon FROM ship WHERE group_type = 20502').hexagon, 'S,E,E,D,D,A')
     assert.ok(get<{ name: string }>(db, 'SELECT name FROM retrofit_node WHERE group_type = 10103 LIMIT 1').name.length > 0)
     assert.equal(
       get<{ class_name: string }>(db, 'SELECT class_name FROM fleet_tech_ship WHERE group_type = 10102').class_name,
@@ -124,10 +161,14 @@ test('meta 里记了 schema 版本、来源 SHA 与逐表行数（不含时间�
     const rows = db.prepare('SELECT key, value FROM meta ORDER BY key').all() as Array<{ key: string; value: string }>
     const meta = new Map(rows.map((r) => [r.key, r.value]))
     db.close()
-    assert.equal(meta.get('schema_version'), '1')
+    assert.equal(meta.get('schema_version'), '2')
     assert.equal(meta.get('data_sha'), sha)
     assert.equal(meta.get('count:ship'), '859')
     assert.equal(meta.get('count:ship_stage_attr'), '41124')
+    assert.equal(meta.get('count:ship_stage_slot'), '17135')
+    assert.equal(meta.get('count:ship_skill'), '9239')
+    assert.equal(meta.get('count:hexagon_axis'), '6')
+    assert.equal(meta.get('count:equip_kind'), '19')
     assert.equal(meta.get('count:retrofit_node'), '1217')
     assert.equal(meta.get('count:orphan_skin'), '358')
     assert.ok(!rows.some((r) => /sync|time|date/i.test(r.key)), 'meta 里出现了时间类键，建库就不再字节可复现')

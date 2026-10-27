@@ -216,3 +216,72 @@ export function listShips(db: DatabaseSync): Array<{ groupType: number; name: st
     name: str(r, 'name'),
   }))
 }
+
+/**
+ * 六维雷达的轴名。位置顺序由构建期的相关性定位写进 hexagon_axis，
+ * 页面不许按 attr_def 的 1..6 自己排——实测那是错的（第 1 位是炮击，耐久在第 6 位）。
+ */
+export interface Hexagon {
+  axes: string[]
+  grades: string[]
+}
+
+export function getHexagon(db: DatabaseSync, groupType: number): Hexagon | null {
+  const axes = (db.prepare('SELECT label FROM hexagon_axis ORDER BY pos').all() as Row[]).map((r) => str(r, 'label'))
+  const head = db.prepare('SELECT hexagon FROM ship WHERE group_type = ?').get(groupType) as Row | undefined
+  if (head === undefined) return null
+  // 六个位置的评级挂在图鉴条目上：上游只有一个 property_hexagon，不随突破阶段变
+  return { axes, grades: str(head, 'hexagon').split(',') }
+}
+
+export interface StageSkills {
+  stage: number
+  skills: Array<{ skillId: number; name: string; descr: string }>
+}
+
+/** 技能按突破阶段存：实测 859 艘里 573 艘的阶段间列表不同（卡辛突破 4 起「全弹发射I」变「II」） */
+export function getShipSkills(db: DatabaseSync, groupType: number): StageSkills[] {
+  const rows = db
+    .prepare('SELECT stage, skill_id, name, descr FROM ship_skill WHERE group_type = ? ORDER BY stage, seq')
+    .all(groupType) as Row[]
+  const out = new Map<number, StageSkills>()
+  for (const r of rows) {
+    const stage = num(r, 'stage')
+    if (!out.has(stage)) out.set(stage, { stage, skills: [] })
+    out.get(stage)?.skills.push({ skillId: num(r, 'skill_id'), name: str(r, 'name'), descr: str(r, 'descr') })
+  }
+  return [...out.values()].sort((a, b) => a.stage - b.stage)
+}
+
+export interface StageSlots {
+  stage: number
+  slots: Array<{ slot: number; labels: string[] }>
+}
+
+/**
+ * 装备位：槽位含义随舰种变（实测槽 1 可以是舰炮/防空炮/战斗机），所以只显示
+ * 「这一位能装什么」，不给槽位起固定名字。类型名取 type_name2，它才分舰种
+ * （1=舰炮(驱逐) / 4=舰炮(战列)）；同名的不同类型（6 与 21 都叫防空炮）合并显示。
+ */
+export function getShipSlots(db: DatabaseSync, groupType: number): StageSlots[] {
+  const kinds = new Map<number, string>()
+  for (const r of db.prepare('SELECT type_id, type_name, type_name2 FROM equip_kind').all() as Row[]) {
+    kinds.set(num(r, 'type_id'), str(r, 'type_name2') || str(r, 'type_name'))
+  }
+  const rows = db
+    .prepare('SELECT stage, slot, kinds FROM ship_stage_slot WHERE group_type = ? ORDER BY stage, slot')
+    .all(groupType) as Row[]
+  const out = new Map<number, StageSlots['slots']>()
+  for (const r of rows) {
+    const stage = num(r, 'stage')
+    const parsed: number[] = JSON.parse(str(r, 'kinds'))
+    const labels: string[] = []
+    for (const k of parsed) {
+      const label = kinds.get(k)
+      if (label !== undefined && !labels.includes(label)) labels.push(label)
+    }
+    if (!out.has(stage)) out.set(stage, [])
+    out.get(stage)?.push({ slot: num(r, 'slot'), labels })
+  }
+  return [...out.entries()].sort((a, b) => a[0] - b[0]).map(([stage, slots]) => ({ stage, slots }))
+}

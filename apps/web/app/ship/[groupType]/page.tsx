@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { AttrCurve } from '../../../components/ship/attr-curve'
 import { openDb, readMeta } from '../../../lib/db'
-import { getShipPage, listShips } from '../../../lib/queries/ship'
+import { getShipPage, getHexagon, getShipSkills, getShipSlots, listShips } from '../../../lib/queries/ship'
 
 /**
  * 舰船详情页。
@@ -25,6 +25,9 @@ const parseGroup = (raw: string): number => {
   return Number.isInteger(n) && n > 0 ? n : Number.NaN
 }
 
+/** 四个阶段是否给同一份技能：是就只写一遍（实测 286/859 艘一致，其余在突破后升级技能） */
+const skillKey = (list: Array<{ skillId: number }>): string => list.map((s) => s.skillId).join(',')
+
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { groupType: raw } = await params
   const group = parseGroup(raw)
@@ -32,7 +35,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   if (ship === null) return { title: '未找到该舰船' }
   return {
     title: `${ship.name}（${ship.englishName}）`,
-    description: `${ship.factionName} ${ship.typeName} ${ship.rarityLabel ?? ''}——属性、突破、皮肤、改造与获取方式。`.trim(),
+    description: `${ship.factionName} ${ship.typeName} ${ship.rarityLabel ?? ''}——属性、突破、六维、装备位、技能、皮肤、改造与获取方式。`.trim(),
   }
 }
 
@@ -47,6 +50,11 @@ export default async function ShipPage({ params }: { params: Promise<Params> }) 
 
   const meta = readMeta(db)
   const attrNames = ship.stages[0]?.attrs ?? []
+  const hex = getHexagon(db, group)
+  const skillRows = getShipSkills(db, group)
+  const slotRows = getShipSlots(db, group)
+  const firstSkills = skillRows[0]
+  const skillsSame = firstSkills !== undefined && skillRows.every((r) => skillKey(r.skills) === skillKey(firstSkills.skills))
 
   return (
     <main>
@@ -110,6 +118,77 @@ export default async function ShipPage({ params }: { params: Promise<Params> }) 
           <AttrCurve key={a.attr} attr={a.attr} label={a.label} stages={ship.stages} />
         ))}
       </div>
+
+      {hex !== null && (
+        <>
+          <h2>六维评级</h2>
+          <p className="kv">
+            {hex.axes.map((label, i) => (
+              <span key={label}>
+                {label} <b>{hex.grades[i]}</b>
+              </span>
+            ))}
+          </p>
+          <p className="note">
+            评级字母取自上游 <code>property_hexagon</code>；六个位置的属性名由构建期对 856 条船做相关性定位写进{' '}
+            <code>hexagon_axis</code>，与属性表顺序不同（实测第 1 位是{hex.axes[0]}，耐久排在最后一位）。
+          </p>
+        </>
+      )}
+
+      <h2>装备位</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>槽位</th>
+            {slotRows.map((r) => (
+              <th key={r.stage}>突破 {r.stage}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {[1, 2, 3, 4, 5].map((slot) => (
+            <tr key={slot}>
+              <td>{slot}</td>
+              {slotRows.map((r) => (
+                <td key={r.stage}>{r.slots.find((s) => s.slot === slot)?.labels.join('、') || '—'}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="note">
+        槽位号只是位置，能装什么随舰种不同，所以这里只列可装类型；同名不同类型（如 6 与 21 都叫防空炮）合并显示。
+        实测 859 艘里 835 艘四个阶段一致，其余 24 艘在突破后多放出一种类型。
+      </p>
+
+      <h2>技能</h2>
+      {skillsSame && firstSkills !== undefined ? (
+        <ul>
+          {firstSkills.skills.map((s) => (
+            <li key={s.skillId}>
+              <b>{s.name}</b>：{s.descr}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        skillRows.map((r) => (
+          <div key={r.stage}>
+            <h3>突破 {r.stage}</h3>
+            <ul>
+              {r.skills.map((s) => (
+                <li key={s.skillId}>
+                  <b>{s.name}</b>：{s.descr}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      )}
+      <p className="note">
+        描述里的 <code>$1</code> / <code>$2</code> 是随技能等级变化的数值占位，机制与触发数值不在本站范围（PLAN §8.2）。
+        {skillsSame ? '四个突破阶段的技能一致。' : '技能列表按突破阶段存：卡辛突破 4 起「全弹发射I」升级为「全弹发射II」。'}
+      </p>
 
       <h2>皮肤（{ship.skins.length}）</h2>
       <table>

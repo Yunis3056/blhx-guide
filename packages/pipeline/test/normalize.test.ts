@@ -6,6 +6,8 @@ import { join } from 'node:path'
 import { buildAttrMap } from '../src/normalize/attr-map.ts'
 import { buildNameCode } from '../src/normalize/name-code.ts'
 import { buildShipRecords } from '../src/normalize/ship.ts'
+import { readTable } from '../src/fetch/fetch.ts'
+import { TABLES, relPath } from '../src/tables.ts'
 import { buildRetrofits } from '../src/normalize/retrofit.ts'
 import { buildFleetTech } from '../src/normalize/fleet-tech.ts'
 import { writeJsonl } from '../src/normalize/jsonl.ts'
@@ -30,6 +32,7 @@ function build() {
   const factionNames = new Map<number, string>()
   for (const f of factions) factionNames.set(f.nationality, tip[`word_shipNation_${f.wordKey}`]?.tip ?? '')
   const fleet = buildFleetTech(dir!, shaNow)
+  const equipRaw = readTable(dir!, shaNow, relPath(TABLES.equipByType)) as Record<string, unknown>
   const built = buildShipRecords(dir!, shaNow, {
     attrMap,
     rarityLabels: labels,
@@ -38,6 +41,7 @@ function build() {
     nameCode: buildNameCode(dir!, shaNow),
     fleetTechClassByGroup: fleet.classByGroup,
     fleetTechClassNationByGroup: fleet.classNationByGroup,
+    equipKindIds: new Set(Object.keys(equipRaw).filter((k) => /^\d+$/.test(k)).map(Number)),
   })
   return { built, fleet, retrofits: buildRetrofits(dir!, shaNow) }
 }
