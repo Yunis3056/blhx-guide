@@ -1,0 +1,28 @@
+{
+  "name": "pipeline",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node --experimental-strip-types src/cli.ts --selfcheck",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "lint": "eslint src test",
+    "fetch": "node --experimental-strip-types src/cli.ts fetch",
+    "check-changes": "node --experimental-strip-types src/cli.ts check-changes",
+    "validate": "node --experimental-strip-types src/cli.ts validate",
+    "normalize": "node --experimental-strip-types src/cli.ts normalize",
+    "emit": "node --experimental-strip-types src/cli.ts emit",
+    "db": "node --experimental-strip-types src/cli.ts db",
+    "verify": "node --experimental-strip-types src/cli.ts verify"
+  },
+  "dependencies": {
+    "pinyin-pro": "^3.26.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "eslint": "^9.17.0",
+    "typescript": "^5.7.2"
+  }
+}

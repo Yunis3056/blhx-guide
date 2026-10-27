@@ -1,0 +1,365 @@
+/**
+ * 表注册表。三件事在这里强制：
+ *   1. 目录前缀 —— CN/ShareCfg 与 CN/sharecfgdata 有 24 组严格互补的同名表，
+ *      ShareCfg 侧那 24 张固定是空壳 []/{}，读错侧不报错，只产出空站点。
+ *   2. keyStrategy —— 键空间不统一，gametip 是 7449 个字符串键（数字键 0 个），
+ *      而多数配置表是数字键 + 一个 all 哨兵（值是 id 数组）。一刀切会清空 gametip。
+ *   3. semantic —— 表名会骗人。technology_data_template 是科研项目不是科技树，
+ *      equip_data_statistics 是族行+等级行混排不是一行一装备。
+ *      未实测条目数的表 measured:false，禁止编造 minRows。
+ */
+
+export type Dir = 'ShareCfg' | 'sharecfgdata' | 'GameCfg'
+export type KeyStrategy = 'numeric' | 'numeric-excluding-all' | 'string'
+export type TopShape = 'dict' | 'list'
+
+export interface TableSpec {
+  dir: Dir
+  /** 不含 .json */
+  name: string
+  top: TopShape
+  keyStrategy: KeyStrategy
+  /** 一句话说明这张表到底是什么 */
+  semantic: string
+  /** semantic 里引用的具体证据条目，CI 断言非空 */
+  evidence: string
+  /** 已实测的最小条目数阈值；未实测为 undefined */
+  minRows?: number
+  measured: boolean
+  tier: 'A' | 'B' | 'C' | 'D'
+}
+
+const T = (s: TableSpec) => s
+
+export const TABLES = {
+  // ── A 档：舰船图鉴主线 ──────────────────────────────────────────
+  shipGroup: T({
+    dir: 'ShareCfg',
+    name: 'ship_data_group',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic: '图鉴基船条目，页面主键 group_type。注意本表没有 name 字段，船名须经皮肤层两跳取得',
+    evidence: '859 行；字段无 name；trans_type 非零 78、trans_skin 非零 106',
+    minRows: 700,
+    measured: true,
+    tier: 'A',
+  }),
+  shipSkinTemplate: T({
+    dir: 'ShareCfg',
+    name: 'ship_skin_template',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic: '皮肤层，id 即图片 join 用的 skinId（不是基船 id）',
+    evidence: '2,730 行；distinct ship_group 1,211；skin_type -1 为默认立绘',
+    minRows: 2200,
+    measured: true,
+    tier: 'A',
+  }),
+  shipStats: T({
+    dir: 'sharecfgdata',
+    name: 'ship_data_statistics',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic: '(船 × 突破阶段) 行，不是每船一行；skin_id 指向默认皮肤',
+    evidence: '3,957 行；attrs / attrs_growth / attrs_growth_extra 三个数组全部定长 12',
+    minRows: 3200,
+    measured: true,
+    tier: 'A',
+  }),
+  shipTemplate: T({
+    dir: 'sharecfgdata',
+    name: 'ship_data_template',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic: '舰船基础配置；等级上限的唯一来源',
+    evidence: '3,806 条；max_level 全部 = 100（故成长曲线只承诺 1-100，不是 1-125）',
+    minRows: 3200,
+    measured: true,
+    tier: 'A',
+  }),
+  shipBreakout: T({
+    dir: 'sharecfgdata',
+    name: 'ship_data_breakout',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic: '突破材料表。条数少于阶段行数，不可假设每个 stats 行都取得到材料',
+    evidence: '3,347 条 ≠ ship_data_statistics 的 3,957，两表非一一对应',
+    minRows: 2800,
+    measured: true,
+    tier: 'A',
+  }),
+  attrInfo: T({
+    dir: 'ShareCfg',
+    name: 'attribute_info_by_type',
+    top: 'dict',
+    keyStrategy: 'numeric-excluding-all',
+    semantic: '12 项属性的权威定义（下标 → name/condition），属性映射的唯一来源，禁止硬编码',
+    evidence: '位 2 是 cannon「炮击」而非「火力」；含 all:[1..12]，键集与 enemy_data_statistics 具名属性一致',
+    minRows: 11,
+    measured: true,
+    tier: 'A',
+  }),
+  shipByType: T({
+    dir: 'ShareCfg',
+    name: 'ship_data_by_type',
+    top: 'dict',
+    keyStrategy: 'numeric-excluding-all',
+    semantic: '舰种权威枚举（含 team_type 站位、维修/退役回收等经济参数）',
+    evidence: '22 键 = 21 个数值类 + all:[1..13,17..24]；14/15/16 不存在',
+    minRows: 18,
+    measured: true,
+    tier: 'A',
+  }),
+  gametip: T({
+    dir: 'sharecfgdata',
+    name: 'gametip',
+    top: 'dict',
+    keyStrategy: 'string',
+    semantic: '全部中文显示文本索引（阵营名、舰种名、装备类别等）。★ 空壳时最隐蔽：不影响行数统计却清空所有中文名',
+    evidence: '7,449 键，数字键 0 个，样本 0815_main_help / word_shipNation_*；word_* 前缀 402 条',
+    minRows: 6000,
+    measured: true,
+    tier: 'A',
+  }),
+  voiceActorCN: T({
+    dir: 'ShareCfg',
+    name: 'voice_actor_CN',
+    top: 'dict',
+    keyStrategy: 'string',
+    semantic: 'CV 姓名表，使皮肤页可显示配音演员（画师无此来源，不展示）',
+    evidence: '502 条有名行；illustrator.json 41 行只有 code 无姓名',
+    minRows: 400,
+    measured: true,
+    tier: 'A',
+  }),
+
+  // ── B 档：改造、语音、科技、掉落 ────────────────────────────────
+  shipTrans: T({
+    dir: 'ShareCfg',
+    name: 'ship_data_trans',
+    top: 'dict',
+    keyStrategy: 'numeric-excluding-all',
+    semantic: '改造分支（哪个船改造成哪个皮肤/技能）。节点条件与成本不在本表',
+    evidence: '107 键 = 106 条 + all:[10103,10104,…]；字段 {group_id, skin_id, skill_id, transform_list}',
+    minRows: 90,
+    measured: true,
+    tier: 'B',
+  }),
+  transformNode: T({
+    dir: 'ShareCfg',
+    name: 'transform_data_template',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic: '改造节点的条件与成本 —— 改造消耗计算的唯一来源。缺它就只能列节点名',
+    evidence: '1,217 节点无 all 键；节点 501 = 舰体改良I / effect:[{durability:45}] / use_gold:200 / use_item:[[[18001,1]]]',
+    minRows: 1000,
+    measured: true,
+    tier: 'B',
+  }),
+  researchProject: T({
+    dir: 'ShareCfg',
+    name: 'technology_data_template',
+    top: 'dict',
+    keyStrategy: 'numeric-excluding-all',
+    semantic: '★ 科研项目目录，不是舰队科技树（表名骗人）。舰队科技另由 fleet_tech_* 建模。' +
+      '注意此表在 ShareCfg 侧且有数据（506KB），不属于 24 组同名空壳 —— 目录不可凭「像是数值表」推断',
+    evidence: '686 键 = 685 条 + all；项目 1 = C-153-MI / time=21600；项目 11 描述原文「该科研项目致力于…收集各种实验数据」',
+    minRows: 550,
+    measured: true,
+    tier: 'B',
+  }),
+  shipSkinWords: T({
+    dir: 'sharecfgdata',
+    name: 'ship_skin_words',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic: '语音文本（battle/home/expedition/gift 等场景的全中文台词）',
+    evidence: '2,485 条，各场景字段均为中文',
+    minRows: 2000,
+    measured: true,
+    tier: 'B',
+  }),
+  skillTemplate: T({
+    dir: 'ShareCfg',
+    name: 'skill_data_template',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic: '技能名与静态描述。机制/触发/buff 数值不在本表，在 GameCfg/skill.json（不取）',
+    evidence: '3,030 行全部有 name',
+    minRows: 2400,
+    measured: true,
+    tier: 'A',
+  }),
+  enemyStats: T({
+    dir: 'ShareCfg',
+    name: 'enemy_data_statistics',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic: '敌方单位属性，用具名字段（与舰船侧的位置数组互为交叉验证）',
+    evidence: '13,568 条；仅 1,962 行有 name；base 不回连任何舰船表（交集 0）',
+    minRows: 11000,
+    measured: true,
+    tier: 'B',
+  }),
+
+  // ── C 档：装备 ─────────────────────────────────────────────────
+  equipStats: T({
+    dir: 'sharecfgdata',
+    name: 'equip_data_statistics',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic: '★ 族行与强化等级行混排，靠 base 继承。8,261 行自身无 name/type/rarity/icon，不展开继承就是 8,261 个空名字页',
+    evidence: '10,365 行；8,841 带 base；stats[501] base=500 且自有字段仅 value_1/value_2',
+    minRows: 9000,
+    measured: true,
+    tier: 'A',
+  }),
+  equipTemplate: T({
+    dir: 'sharecfgdata',
+    name: 'equip_data_template',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic: '普通强化等级链（next/prev）+ 装备正体判定连接表 + 分解/回收/转换经济参数',
+    evidence: '9,170 条；8,261 行有 next 且全部能在本表解析，0 断裂（500 lv1 → 501 lv2 → 502…）',
+    minRows: 8000,
+    measured: true,
+    tier: 'A',
+  }),
+  equipByType: T({
+    dir: 'ShareCfg',
+    name: 'equip_data_by_type',
+    top: 'dict',
+    keyStrategy: 'numeric-excluding-all',
+    semantic: '装备分类的权威枚举；装备条目的正向判据之一',
+    evidence: '20 键 = 19 个数值类 + all；type_name 12 种（舰炮/鱼雷/防空炮/战斗机/…）',
+    minRows: 17,
+    measured: true,
+    tier: 'A',
+  }),
+  equipUpgradeData: T({
+    dir: 'ShareCfg',
+    name: 'equip_upgrade_data',
+    top: 'dict',
+    keyStrategy: 'numeric-excluding-all',
+    semantic: '★ 装备转换 / 研发图（有分叉与汇合），不是普通强化等级链（那是 equip_data_template.next/prev）',
+    evidence: '282 键 = 281 条 + all:[4340,11060,…]；{id, upgrade_from, target_id, material_consume, coin_consume}',
+    minRows: 240,
+    measured: true,
+    tier: 'A',
+  }),
+
+  // ── 尚未实测的表：禁止编造 minRows，首次取数时由脚本记录真实条目数 ──
+  fleetTechTemplate: T({
+    dir: 'ShareCfg',
+    name: 'fleet_tech_template',
+    top: 'dict',
+    keyStrategy: 'numeric-excluding-all',
+    semantic: '舰队科技（按阵营/舰种的科技点）—— 与科研项目 technology_data_template 是两个体系',
+    evidence: '待实测：条目数未在本环境测得，首次取数后回填',
+    measured: false,
+    tier: 'A',
+  }),
+  fleetTechShipTemplate: T({
+    dir: 'ShareCfg',
+    name: 'fleet_tech_ship_template',
+    top: 'dict',
+    keyStrategy: 'numeric-excluding-all',
+    semantic: '单船科技点加成',
+    evidence: '待实测：246KB，条目数未测',
+    measured: false,
+    tier: 'A',
+  }),
+  shipDataByStar: T({
+    dir: 'ShareCfg',
+    name: 'ship_data_by_star',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic: '★ 星级经济参数表（分解产物/油料回复比/兑换价/等级限制），不是稀有度显示名标签',
+    evidence: '字段 destory_item / energy_recover_food_ratio / energy_recover_time_ratio / exchange_price / level_restrictions；无显示名字段',
+    measured: false,
+    tier: 'A',
+  }),
+} satisfies Record<string, TableSpec>
+
+export type TableKey = keyof typeof TABLES
+
+/**
+ * 仓库根相对路径。ShareCfg 与 sharecfgdata 存在同名表，
+ * 任何按裸文件名读表的代码都属于缺陷。
+ */
+export function relPath(spec: TableSpec): string {
+  return `CN/${spec.dir}/${spec.name}.json`
+}
+
+/**
+ * 按 keyStrategy 取主键集合。
+ * 全局一律 /^\\d+$/ 会把 gametip（7,449 个字符串键）取成空集。
+ */
+export function keysOf(raw: unknown, spec: TableSpec): string[] {
+  if (Array.isArray(raw)) {
+    if (spec.top !== 'list') {
+      // 措辞很重要：把「读错目录」报成「类型不匹配」会把排查引向 schema 而不是路径。
+      // ShareCfg 侧那 24 张空壳是 [] 或 {}，空数组正是走这条分支进来的。
+      throw new Error(
+        `${spec.name}: 顶层是数组（${raw.length} 项）但注册表声明 top:'dict'。` +
+          (raw.length === 0
+            ? '空数组 —— 高度怀疑读到了同名空壳表，应读 sharecfgdata 侧'
+            : '非空数组 —— 上游改了顶层结构') +
+          `（声明路径 ${spec.dir}）`,
+      )
+    }
+    return raw.map((_, i) => String(i))
+  }
+  if (raw && typeof raw === 'object') {
+    if (spec.top !== 'dict') {
+      throw new Error(`${spec.name}: 顶层是对象但注册表声明 top:'${spec.top}'`)
+    }
+    const all = Object.keys(raw)
+    switch (spec.keyStrategy) {
+      case 'numeric': {
+        // 严格：这张表除主键外不该有任何非数字键。出现即上游改了键空间，必须停
+        const bad = all.filter((k) => !/^\d+$/.test(k))
+        if (bad.length > 0) {
+          throw new Error(
+            `${spec.name}: keyStrategy:'numeric' 但出现 ${bad.length} 个非数字键（样本 ${bad.slice(0, 3).join(', ')}）。` +
+              `若该表本就带 all 哨兵，应显式声明 numeric-excluding-all`,
+          )
+        }
+        return all
+      }
+      case 'numeric-excluding-all':
+        // 允许且仅允许 all 这一个非数字哨兵
+        return all.filter((k) => /^\d+$/.test(k))
+      case 'string':
+        return all
+    }
+  }
+  throw new Error(`${spec.name}: 无法识别的顶层类型`)
+}
+
+/** 加载后断言。空壳 []/{} 在这里被拦下，不会静默进入归一化产物。 */
+export function assertSpec(raw: unknown, spec: TableSpec): string[] {
+  if (spec.semantic.length === 0) throw new Error(`${spec.name}: 缺少 semantic 说明`)
+  if (spec.evidence.length === 0) throw new Error(`${spec.name}: 缺少 evidence 证据条目`)
+  const keys = keysOf(raw, spec)
+  if (keys.length === 0) {
+    throw new Error(
+      `${spec.name}: 条目数为 0。这通常是读到了同名空壳表 —— 应读目录 ` +
+        `${spec.dir}，检查 ${relPath(spec)} 是否取自 sharecfgdata 侧`,
+    )
+  }
+  if (spec.measured) {
+    if (spec.minRows === undefined) {
+      throw new Error(`${spec.name}: measured:true 却没有 minRows 阈值`)
+    }
+    if (keys.length < spec.minRows) {
+      throw new Error(
+        `${spec.name}: 条目数 ${keys.length} 低于注册表阈值 ${spec.minRows}（` +
+          `实测基准见 evidence: ${spec.evidence}）。中止同步，不覆盖 normalized`,
+      )
+    }
+  } else if (spec.minRows !== undefined) {
+    throw new Error(`${spec.name}: 未实测的表不允许设置 minRows，请先实测再回填`)
+  }
+  return keys
+}

@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# 取数产物：原始解包数据不入库（体积大，且可由 manifest 里的 SHA 重新取）
+data/raw/
+
+# 构建期重建，不入库
+data/al.sqlite
+data/al.sqlite-*
+
+# LocalAdapter 输出，不入库（上云走 R2）
+data/images/
+
+# 探针与临时产物
+.probe-*
+.gate.json
+.drift-report.md
+reports/
+
+.next/
+out/
