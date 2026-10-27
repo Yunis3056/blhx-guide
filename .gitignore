@@ -24,3 +24,6 @@ reports/
 
 .next/
 out/
+
+# Next 生成的类型声明与构建缓存
+next-env.d.ts

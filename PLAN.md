@@ -1269,6 +1269,22 @@ Output directory  apps/web/out
 
 **环境变量只允许一个名字**：`NEXT_PUBLIC_IMG_BASE`。此前 §4.6 代码读 `IMG_BASE`、§6.2 却设 `IMG_CDN`，两边对不上会让图片 URL 变成 `undefined/...`。`ci.yml` 加一条断言：构建产物里 grep 不到字符串 `undefined/`。
 
+这条断言的**搜索串必须是带斜杠的 `undefined/`**：单页实测里 `undefined` 出现 29 次，全部是 Next RSC flight 载荷自己的 `"$undefined"` 哨兵，扫裸词等于天天误报。同理 `/_next/image` 只能扫 HTML——`out/_next/static/chunks/main-*.js` 里含这个字面量 2 次，是 Next 运行时自带的 image loader，删不掉。
+
+**首版页面实测**（本机 Windows，Node 24，Next 15.5.28 + React 19.3.1）：
+
+| 项 | 值 |
+| --- | --- |
+| `node:sqlite` 在 `next build` 的预渲染进程里 | 可直接用，不需要 `--experimental-sqlite`；Pages Linux 镜像仍待 1.12 验 |
+| 首页 First Load JS | 106 kB（共享 chunk 102 kB） |
+| 舰船详情页 HTML | 47.7 kB（12 张属性图 + 3 张表 + 页脚来源） |
+| 每条成长线的顶点数 | 2 个端点。按 1–100 逐点画线时同一页是 **298 kB**，859 页即 250MB+；公式对等级线性，端点即精确 |
+| 产物文件数（1 艘船切片） | 24 个文件 / 953KB，其中 HTML 4 个（`/`、`/404`、`/404/index`、`/ship/20502/`） |
+| 未预渲染路径 | `/ship/99999/` → 404，与 `dynamicParams = false` 一致 |
+| §4.6 的 ESLint 守卫 | 反证过：塞进 `export const runtime = 'edge'` 与 `cookies()` 各报一条错，而 `export const dynamicParams = false` 不被误杀 |
+
+构建期 `next build` 的类型检查保持开启（它在首跑就抓到一个真实错误：查询里取了不存在的 `label` 列）；ESLint 不在构建里重跑一遍，`apps/web/eslint.config.mjs` 继承根配置并追加守卫规则，由 `pnpm lint` 单独执行——两处都跑只会让同一个错误有两份日志。
+
 **依赖安装确实需要网络**。Cloudflare Pages 在构建时执行 install（官方 Next.js Static HTML Export 文档明说），因此本文对「零网络」的口径统一为：**构建阶段不访问业务数据源**（AzurLaneData / EN 仓库 / biligame wiki），依赖安装与 CF 平台自身通信不在禁止之列。§7 阶段 1 的断网验收改为「把 `data/raw` 与网络出口 mock 掉，`pnpm build` 仍产出与联网时逐字节相同的 `out/`」。
 
 **原生模块：改用 `node:sqlite`，`better-sqlite3` 从依赖里去掉**（原为「待实测」项，本机已实测完成）。
@@ -1703,7 +1719,7 @@ jobs:
 | 1.7 | normalize 三层 + 改造 + 舰队科技（`ship` / `ship_stage` / `ship_skin` / `ship_retrofit` / `fleet_tech`）+ 枚举表 + `manifest.json`，全部 join 断言内置 | 实测 859 / **3,427**（表内阶段行 3,429，skin 900424 的 2 行属于 352 个孤儿 group 之一，进隔离清单不入库）/ 2,730 / 106 / (4+36+726)，产物 226.0KB gz，隔离清单 529 条 |
 | 1.8 | emit JSONL → 建 SQLite（16 表、外键常开、逐表行数与 jsonl 对账、`PRAGMA integrity_check`） | `data/al.sqlite` 2.83 MiB 可查：ship 859 · ship_stage 3,427 · ship_stage_attr 41,124 · ship_skin 2,730 · orphan_skin 358 · ship_source 1,432 · retrofit_node 1,217 · fleet_tech_ship 726；两次建库逐字节相同；建库 < 1s；`$TURBO_ROOT$` 输入指纹按 §6.5 实测表逐条通过 |
 | 1.9 | 图片：1 艘船的 icon + 默认立绘 + 1 张换装，**skinId 精确 join** → sharp → LocalAdapter（**仅本地验证，不上线**） | 实测 `--limit=1`（group 10000）出 7 个产物、`--group=20502` 再 7 个，共 14 文件 992KB；全部 EN 命中、零降级；第二次跑同一艘船下载 0 张跳过 7 项 |
-| 1.10 | Next.js 脚手架 + `/ship/[groupType]`（**仅 1 艘**）+ §4.6 全部配置项 | 1 个静态页 |
+| 1.10 | Next.js 脚手架 + `/ship/[groupType]`（**仅 1 艘**）+ §4.6 全部配置项 | 实测：`out/` 24 文件 953KB，详情页 HTML 47.7KB，首页 First Load JS 106KB；`/ship/99999/` 走 404；页面渲染 12 项属性表 + 12 张 1–100 端点图 + 5 个皮肤（含 CV）+ 12 条改造节点（中文 descrip，机器格式 effect 不入库展示）+ 舰级与科技点 + 3 条获取方式；构建期与浏览器双端零 console 错误 |
 | 1.11 | 部署 Pages（**无图版本**，立绘位置渲染占位块） | 线上可访问，首个 200 |
 | 1.12 | 冷构建实测：记录产物文件数、构建时长、`out/` 清单；确认 Pages 镜像里 `node:sqlite` 是否需 `NODE_OPTIONS=--experimental-sqlite`；确认 `sharp` 在 Pages Linux 的可用性 | `docs/baseline.md` |
 
@@ -1837,7 +1853,7 @@ data/manual/**  →(pipeline#normalize, cache:false)→  data/normalized/*.jsonl
 
 由此得出一条约束：`manifest.json` 里不能有墙上时间。带 `syncedAt` 的那版实测过——数据一模一样、只是重跑了一次 normalize，建库 key 就换了，等于每天定时同步都在无意义地重建整站。同步时刻记在 `data/snapshots/index.json`，那个文件不进任何构建指纹。
 
-**验收**（全部机器化，不接受人工目测）：连续 7 天无人工干预；上游更新后 24 小时内站点自动跟进并产出更新公告；`git checkout data/<seq-1> -- data/normalized && pnpm build && wrangler pages deploy` 演练一次成功且页面数据确回到旧值；`out/` 文件数与 `generateStaticParams` 声明的路由数逐一相等（§4.6）；`apps/web/out` 内 grep 不到任何 `/_next/image`；冷构建时长与产物数写入 `docs/baseline.md` 作为后续基准。
+**验收**（全部机器化，不接受人工目测）：连续 7 天无人工干预；上游更新后 24 小时内站点自动跟进并产出更新公告；`git checkout data/<seq-1> -- data/normalized && pnpm build && wrangler pages deploy` 演练一次成功且页面数据确回到旧值；`out/` HTML 文件数与 `generateStaticParams` 声明的路由数逐一相等（§4.6）；`out/` 的 **HTML** 里 grep 不到 `/_next/image`（Next 自带的 `main-*.js` 运行时 chunk 里就有这个字面量，扫全产物目录的守卫会永远自打）；冷构建时长与产物数写入 `docs/baseline.md` 作为后续基准。
 
 ### 阶段 6 · 计算工具（面板估算）
 

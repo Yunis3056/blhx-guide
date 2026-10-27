@@ -1,0 +1,127 @@
+/* 阶段 1 只用系统字体与一张样式表：首屏不加载额外字体，也不引入 UI 框架。
+   组件库（shadcn/ui）与暗色模式在阶段 3 与全站设计一起做，这里先保证数据可读。 */
+
+:root {
+  --bg: #12161c;
+  --panel: #1a2028;
+  --line: #2b3340;
+  --fg: #e6e9ee;
+  --muted: #96a0af;
+  --accent: #5fa8ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.65 system-ui, 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+}
+
+main {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 26px;
+}
+
+h2 {
+  margin: 32px 0 12px;
+  font-size: 18px;
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+}
+
+.kv {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.kv b {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--line);
+  padding: 6px 8px;
+  text-align: right;
+}
+
+th:first-child,
+td:first-child {
+  text-align: left;
+}
+
+thead th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.card h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.warn {
+  background: #2a2113;
+  border: 1px solid #6a5220;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: #e8d8a8;
+}
+
+ul {
+  padding-left: 20px;
+}
+
+footer {
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
