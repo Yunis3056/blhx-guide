@@ -1998,7 +1998,8 @@ README 里的非商业声明、作者署名、DMCA 邮箱，都不等于权利�
 
 - Git Bash 的 MSYS 会把前导斜杠参数翻译成 Windows 路径（`/CN/x.json` → `D:/Program Files/Git/CN/x.json`），导致 sparse-checkout **零检出但 exit code 为 0**。手动调试加 `MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'`；生产代码用 `spawn('git', [args])` 数组传参不经 shell。
 - **Windows 换行陷阱**：Python 在 Windows 写文件与管道输出默认 `\r\n`，`while read` 循环里变量会带 `\r`，导致 `curl -o` 报「No such file or directory」且原因完全不直观。清单文件必须 `open(..., 'w', newline='\n')` 或管道后接 `tr -d '\r'`。
-- `raw.githubusercontent.com` 与 `cdn.jsdelivr.net` 在部分网络被 DNS 阻断（HTTP 000 / 0.1 秒），而 `github.com` / `api.github.com` / `codeload.github.com` 正常。本地一律走 git、codeload 或 API。
+- `raw.githubusercontent.com` 与 `cdn.jsdelivr.net` 在部分网络被 DNS 阻断（HTTP 000 / 0.1 秒），`api.github.com` / `codeload.github.com` 正常。本地一律走 codeload 或 API。
+- **`github.com` 本身不稳定**：同一台机器一小时内 `git push` 先成功、后 `Recv failure: Connection was reset`，再变 `Failed to connect to github.com:443`（21 秒超时），而同一时刻 `api.github.com` 0.33 秒返回 200。所以「本地能 push」不能作为任何步骤的前提：push 必须写成可重放的动作，取数与探测一律走 api/codeload 域名。CI 在 GitHub runner 上跑，不受本机这条影响。
 - `github.com` 会降级（实测 0.61 秒劣化到 15.5 秒），此时 `--filter=blob:none` 的按需取回报 `unable to read sha1 file` 且**索引被清空成 0 条目**。取数后必须断言文件非空且可解析。
 - REST API 未认证限额 60 次/小时；超限返回 **280 字节的 JSON 错误体，极易被当成成功响应写进文件**。每次 API 调用后校验体积与可解析性。
 - `AzurLaneData` git 历史约 4GB，当前树仅 3,157 文件，必须 `--depth 1` 或走 codeload tarball。
@@ -2204,6 +2205,7 @@ enemy_data_by_type      26 键（驱逐…，含舰船侧不存在的 14 鱼雷�
 | 探测项 | 结果 |
 |---|---|
 | `codeload.github.com` 全仓 tarball | **125MB / 约 40 秒，不受 REST 限额约束**，主路径 |
+| `git push` 到 `github.com` | 同机一小时内先通后断：`Recv failure: Connection was reset` → `Failed to connect to github.com:443`（21s 超时），同时刻 `api.github.com` 返回 200 / 0.33s。本地 push 只能当可重放动作，不可当前提 |
 | **Windows 下 `tar` 吃 Windows 绝对路径** | 传 `E:\agents\…\x.tar.gz` 给 Git Bash 的 tar，先报 `Cannot connect to E: resolve failed`（tar 的 `[host:]path` 语法把盘符当远程主机），并连带抛出误导性的 `gzip: stdin: unexpected end of file`。加 `--force-local` 只是把症状换成 `E\:\agents\\qoder\…\004cca5c…: Cannot open: No such file or directory`——**连 SHA 都被转义改写**。**可用写法：`cwd` 定位 + 全部相对路径**（`tar -xzf <name>.tar.gz -C . <members>`）。`ubuntu-latest` 是 POSIX 路径不会触发，但同一份代码两边都得跑 |
 | **tarball 体积不能当完整性判据** | 实测同一 SHA 两次下载 125,181,350 与 125,157,642 字节级别相近，「< 50MB 即异常」这类阈值拦不住中途截断。用 `gzip -t` 验流 |
 | `corepack enable` 在非管理员环境 | `EPERM: operation not permitted, open 'D:\Program Files\nodejs\pnpm'`。改用 `corepack pnpm <cmd>`（`corepack prepare pnpm@9.15.4 --activate` 本身成功），CI 侧由 `pnpm/action-setup` 装不受影响 |
