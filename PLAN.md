@@ -1742,10 +1742,22 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 | 1.8 | emit JSONL → 建 SQLite（16 表、外键常开、逐表行数与 jsonl 对账、`PRAGMA integrity_check`） | `data/al.sqlite` 2.83 MiB 可查：ship 859 · ship_stage 3,427 · ship_stage_attr 41,124 · ship_skin 2,730 · orphan_skin 358 · ship_source 1,432 · retrofit_node 1,217 · fleet_tech_ship 726；两次建库逐字节相同；建库 < 1s；`$TURBO_ROOT$` 输入指纹按 §6.5 实测表逐条通过 |
 | 1.9 | 图片：1 艘船的 icon + 默认立绘 + 1 张换装，**skinId 精确 join** → sharp → LocalAdapter（**仅本地验证，不上线**） | 实测 `--limit=1`（group 10000）出 7 个产物、`--group=20502` 再 7 个，共 14 文件 992KB；全部 EN 命中、零降级；第二次跑同一艘船下载 0 张跳过 7 项 |
 | 1.10 | Next.js 脚手架 + `/ship/[groupType]`（**仅 1 艘**）+ §4.6 全部配置项 | 实测：`out/` 24 文件 953KB，详情页 HTML 47.7KB，首页 First Load JS 106KB；`/ship/99999/` 走 404；页面渲染 12 项属性表 + 12 张 1–100 端点图 + 5 个皮肤（含 CV）+ 12 条改造节点（中文 descrip，机器格式 effect 不入库展示）+ 舰级与科技点 + 3 条获取方式；构建期与浏览器双端零 console 错误 |
-| 1.11 | 部署 Pages（**无图版本**，立绘位置渲染占位块） | 线上可访问，首个 200 |
-| 1.12 | 冷构建实测：记录产物文件数、构建时长、`out/` 清单；确认 Pages 镜像里 `node:sqlite` 是否需 `NODE_OPTIONS=--experimental-sqlite`；确认 `sharp` 在 Pages Linux 的可用性 | `docs/baseline.md` |
+| 1.11 | 部署 Pages（**无图版本**，立绘位置渲染占位块） | 实测：`wrangler pages project create blhx-guide` + `pages deploy apps/web/out` 直传 24 文件，3.46s 上传完成。线上 `https://blhx-guide.pages.dev/` 与 `/ship/20502/` 均 200，`/ship/99999/` 404；线上 HTML 里 `undefined/`、`/_next/image`、`<img>` 全部 0 命中 |
+| 1.12 | 冷构建实测：记录产物文件数、构建时长、`out/` 清单；确认 `node:sqlite` 是否需要 `NODE_OPTIONS=--experimental-sqlite`；确认 `sharp` 在构建镜像里的可用性 | 见下方「1.12 的口径随部署通道改变」 |
 
-**验收**：线上打开该船页，12 项属性曲线（键名与 `attr_def` 一致）、**1–100 级**成长（不是 125，§3.7）、突破阶段、皮肤列表（含 CV 姓名，不含画师）、改造分支（来自 `trans_*`，§3.5）、科技点、获取方式全部渲染。**图片链路只在本地验收**：`pnpm --filter pipeline images --limit=1` 一艘船产出 7 个产物（icon 1 + 默认立绘 3 变体 + 换装立绘 3 变体），逻辑名里的 skinId 与 `ship_skin_template.id` 逐个对得上，且降级占位为 0；线上断链风险通过「阶段 1 不放图」消除，不放线上图片验收项。构建期把 `data/raw` 与业务数据源出口 mock 掉后，`pnpm build` 仍产出与联网时逐字节相同的 `out/`（口径见 §4.6）。1.12 的冷构建数字**只记录不达标线**——此前所有产物数与时长都是推算值，第一次真实构建的目的就是推翻它们。
+**Pages 侧的构建通道换了含义**：选定 wrangler 直传（Direct Upload）后，Pages 不再跑 `pnpm build`，所以原本挂在「Pages 构建镜像」上的两个待实测项（`node:sqlite` 是否需要显式标志、`sharp` 在 Pages Linux 的可用性）转移到了**真正执行构建的那台机器**上——目前是开发机（Windows + Node 24.21，两项都已实测可用），若接 GitHub Actions 就是 ubuntu-latest + Node 24。三条可选路径与代价：
+
+| 通道 | 构建发生在 | 代价 |
+| --- | --- | --- |
+| 人工 `wrangler pages deploy` | 开发机 | 每次上线都要人跑一遍，做不到「上游更新 24 小时内自动跟进」（§6.5 的承诺） |
+| `ci.yml` 构建 + 直传 | GitHub Actions ubuntu-latest | 要把 Cloudflare 令牌存进仓库 Secrets；构建环境从 Pages 镜像换成 Actions 镜像，`node:sqlite` / `sharp` 要在新镜像里重测一次 |
+| Pages Git 集成（Connected） | Pages 自己的构建镜像 | 回到原命题：Pages Linux 镜像里 `node:sqlite` 与 `sharp` 的可用性未验；且 Root directory 必须留空为仓库根，填 `apps/web` 会跳过 emit 前置步骤（§4.6 的难察觉失败） |
+
+**Pages 默认开 HTML minify**：同一份 `out/ship/20502/index.html` 本地 47,712 字节，线上传回 44,826 字节；把两边都压掉标签间空白后逐字节相同（44,775）。所以「产物体积」有两个数，比对预算时要用线上数，而 §4.5 的守卫跑在本地 `out/` 上，留的余量天然覆盖这个差值。
+
+**令牌权限以实测为准**：这把令牌在 `GET /user/tokens/verify` 上返回 `Invalid API Token`，却能列账户下的 Pages 项目、能建项目、能直传部署——按提示判断会误判成「令牌不能用」，按调用结果判断才知道它够用。R2 的 S3 兼容凭证（access key / secret）在无图模式下完全没用到。
+
+**验收**（2026-10-28 已在 `https://blhx-guide.pages.dev/ship/20502/` 逐条核过）：线上打开该船页，12 项属性曲线（键名与 `attr_def` 一致）、**1–100 级**成长（不是 125，§3.7）、突破阶段、皮肤列表（含 CV 姓名，不含画师）、改造分支（来自 `trans_*`，§3.5）、科技点、获取方式全部渲染。**图片链路只在本地验收**：`pnpm --filter pipeline images --limit=1` 一艘船产出 7 个产物（icon 1 + 默认立绘 3 变体 + 换装立绘 3 变体），逻辑名里的 skinId 与 `ship_skin_template.id` 逐个对得上，且降级占位为 0；线上断链风险通过「阶段 1 不放图」消除，不放线上图片验收项。构建期把 `data/raw` 与业务数据源出口 mock 掉后，`pnpm build` 仍产出与联网时逐字节相同的 `out/`（口径见 §4.6）。1.12 的冷构建数字**只记录不达标线**——此前所有产物数与时长都是推算值，第一次真实构建的目的就是推翻它们。
 
 ### 阶段 2 · 舰船图鉴全量
 
