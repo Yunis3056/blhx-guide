@@ -17,8 +17,8 @@ import {
   isStageRow,
 } from '../src/normalize/stage-rows.ts'
 
-const RAW = join(import.meta.dirname!, '..', '..', '..', 'data', 'raw')
-const ROOT = join(import.meta.dirname!, '..', '..', '..')
+const RAW = join(import.meta.dirname, '..', '..', '..', 'data', 'raw')
+const ROOT = join(import.meta.dirname, '..', '..', '..')
 const SHA_FILE = join(RAW, 'CURRENT_SHA')
 const sha = existsSync(SHA_FILE) ? readFileSync(SHA_FILE, 'utf8').trim() : null
 const dir = sha ? join(RAW, sha) : null

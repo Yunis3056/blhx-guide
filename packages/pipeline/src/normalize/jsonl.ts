@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { join } from 'node:path'
+import { sha256Buf } from '../hash.ts'
 
 /**
  * normalized/*.jsonl.gz 的唯一写入口。
@@ -22,5 +22,5 @@ export function writeJsonl(dir: string, file: string, rows: readonly unknown[]):
   const body = rows.map((r) => JSON.stringify(r)).join('\n') + (rows.length > 0 ? '\n' : '')
   const gz = gzipSync(Buffer.from(body, 'utf8'), { level: 9 })
   writeFileSync(join(dir, file), gz)
-  return { rows: rows.length, bytes: gz.length, sha256: createHash('sha256').update(gz).digest('hex') }
+  return { rows: rows.length, bytes: gz.length, sha256: sha256Buf(gz) }
 }

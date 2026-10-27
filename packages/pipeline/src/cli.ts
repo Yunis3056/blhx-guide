@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TABLES, assertSpec, relPath, type TableKey } from './tables.ts'
+import { buildDatabase } from './store/build.ts'
 import { STAGE1_TABLES, whitelistFor, STUB_PROBES } from './whitelist.ts'
 import { resolveSha, downloadTarball, fetchTree, extractWhitelist, readTable, topDir } from './fetch/fetch.ts'
 import { buildAttrMap, assertMatchesEnemy, assertArrayLength } from './normalize/attr-map.ts'
@@ -13,9 +14,11 @@ import { loadRarityDecl, buildShipRarity, assertObservedRarity } from './display
 import { buildShipRecords } from './normalize/ship.ts'
 import { buildRetrofits } from './normalize/retrofit.ts'
 import { buildFleetTech } from './normalize/fleet-tech.ts'
+import { buildEnumRows } from './normalize/enums.ts'
 import { writeJsonl } from './normalize/jsonl.ts'
+import { readManifest, writeManifest, assertSameGeneration, type ManifestFileEntry } from './manifest.ts'
 
-const ROOT = join(import.meta.dirname!, '..', '..', '..')
+const ROOT = join(import.meta.dirname, '..', '..', '..')
 const RAW = join(ROOT, 'data', 'raw')
 
 function log(msg: string): void {
@@ -44,7 +47,7 @@ async function cmdFetch(): Promise<void> {
 
   log('3/4 Trees API 取全树 blob OID …')
   const treePath = join(shaDir, 'tree-index.json')
-  let tree = existsSync(treePath)
+  const tree = existsSync(treePath)
     ? (JSON.parse(readFileSync(treePath, 'utf8')) as Awaited<ReturnType<typeof fetchTree>>)
     : await fetchTree(sha)
   if (!existsSync(treePath)) writeFileSync(treePath, JSON.stringify(tree), { encoding: 'utf8' })
@@ -180,12 +183,38 @@ async function cmdValidate(): Promise<void> {
 }
 
 /**
+ * 1.8 emit：manifest.json + data/al.sqlite
+ *
+ * 建库只读已提交的 data/normalized/，不碰 data/raw —— raw 不入库，Pages 构建机上
+ * 没有它。所以这条命令能在干净检出后单独跑通，本身就是「站点数据自洽可重建」的证明。
+ */
+function cmdEmit(): void {
+  const normDir = join(ROOT, 'data', 'normalized')
+  const dbPath = join(ROOT, 'data', 'al.sqlite')
+  const manifest = readManifest(normDir)
+  // manifest 与 jsonl 都是入库文件；这一步保证二者同代，否则旧 jsonl 配新表会静默出错页
+  const files = assertSameGeneration(manifest, normDir)
+
+  const built = buildDatabase(normDir, dbPath, manifest.dataSha)
+
+  log(`emit → ${dbPath}`)
+  for (const [t, n] of Object.entries(built.counts)) log(`  ${t.padEnd(20)} ${String(n).padStart(6)} 行`)
+  log(
+    `  快照：seq ${manifest.snapshotSeq} · dataSha ${manifest.dataSha.slice(0, 12)} · ${files.length} 个 jsonl（sha256 已核对）`,
+  )
+}
+
+/**
  * 1.7 归一化三层 + 改造 + 舰队科技 → data/normalized/*.jsonl.gz
  *
  * 这一步不写 manifest（1.8），但已经带上全部 join 断言：任何一侧对不上就中止，
  * 产出的文件永远是「完整且自洽」的，不会出现在线页面缺半列的情况。
  */
-function cmdNormalize(): void {
+function cmdNormalize(argv: string[]): void {
+  const seqIdx = argv.indexOf('--seq')
+  const seq = seqIdx >= 0 ? Number(argv[seqIdx + 1]) : 0
+  if (!Number.isInteger(seq) || seq < 0) throw new Error(`--seq 必须是非负整数，实得 ${argv[seqIdx + 1]}`)
+
   const sha = currentSha()
   const root = join(RAW, sha)
   const outDir = join(ROOT, 'data', 'normalized')
@@ -208,8 +237,17 @@ function cmdNormalize(): void {
     factionNames.set(f.nationality, t)
   }
   const decl = loadRarityDecl(manualPath(ROOT, 'rarity'))
-  const rarityLabels = new Map(buildShipRarity(tip, decl.ship.declaredDomain).map((r) => [r.value, r.label]))
+  const shipRarity = buildShipRarity(tip, decl.ship.declaredDomain)
+  const rarityLabels = new Map(shipRarity.map((r) => [r.value, r.label]))
   const nameCode = buildNameCode(root, sha)
+
+  const hullRaw = readTable(root, sha, relPath(TABLES.shipByType)) as Record<string, { type_name: string; team_type: string }>
+  const hulls = new Map<number, { typeName: string; teamType: string }>()
+  for (const [k, v] of Object.entries(hullRaw)) {
+    if (!/^\d+$/.test(k)) continue
+    hulls.set(Number(k), { typeName: String(v.type_name), teamType: String(v.team_type) })
+  }
+  const enums = buildEnumRows(attrMap, shipRarity, hulls, factions, factionNames)
 
   const fleet = buildFleetTech(root, sha)
   const built = buildShipRecords(root, sha, {
@@ -229,20 +267,38 @@ function cmdNormalize(): void {
     { name: 'ship-skins.jsonl.gz', rows: built.skins },
     { name: 'ship-retrofits.jsonl.gz', rows: retrofits },
     { name: 'fleet-tech.jsonl.gz', rows: fleet.rows },
+    { name: 'enums.jsonl.gz', rows: enums.rows },
   ]
-  const written: Array<{ file: string; rows: number; bytes: number }> = []
+  const written: Array<ManifestFileEntry & { file: string }> = []
   for (const f of files) written.push({ file: f.name, ...writeJsonl(outDir, f.name, f.rows) })
   const quarantineFile = writeJsonl(reportDir, 'quarantine.jsonl.gz', built.quarantine)
+
+  // manifest 只在这一步生成，且字段全由数据内容决定：时间戳不进 normalized，
+  // 否则它作为构建指纹会让「数据没变」也触发整站重建
+  const tableDirs: Record<string, string> = {}
+  for (const key of STAGE1_TABLES) tableDirs[TABLES[key].name] = TABLES[key].dir
+  writeManifest(outDir, {
+    dataSha: sha,
+    snapshotSeq: seq,
+    server: 'CN',
+    tier: ['A'],
+    files: Object.fromEntries(written.map((w) => [w.file, { rows: w.rows, bytes: w.bytes, sha256: w.sha256 }])),
+    tableDirs,
+  })
 
   // 基线：这些数字是实测值，掉了就是上游或我们的 join 变了，必须有人来看
   const baselines: Array<[string, number, number]> = [
     ['ships', built.ships.length, 859],
-    ['ship-stages', built.stages.length, 3429],
+    ['ship-stages', built.stages.length, 3427],
     ['ship-skins', built.skins.length, 2730],
     ['ship-retrofits', retrofits.length, 106],
     ['fleet-tech-group', fleet.counts.groups, 4],
     ['fleet-tech-node', fleet.counts.nodes, 36],
     ['fleet-tech-ship', fleet.counts.ships, 726],
+    ['enum-attr', enums.counts.attr, 12],
+    ['enum-rarity', enums.counts.rarity, 5],
+    ['enum-hull', enums.counts.hull, 21],
+    ['enum-faction', enums.counts.faction, 29],
   ]
   log(`归一化 ${sha.slice(0, 12)} → data/normalized/`)
   for (const b of baselines) {
@@ -257,6 +313,7 @@ function cmdNormalize(): void {
   log(`  舰船无稀有度 ${noRarity} · 无阵营名 ${noFaction} · 孤儿皮肤 ${orphanSkins}（孤儿只登记不建页）`)
   log(`  隔离清单 ${quarantineFile.rows} 条 → reports/quarantine.jsonl.gz`)
   for (const w of written) log(`  ${w.file.padEnd(26)} ${String(w.rows).padStart(5)} 行  ${(w.bytes / 1024).toFixed(1)} KB gz`)
+  log(`  manifest.json：seq ${seq} · ${written.length} 个 jsonl 的 sha256 已登记`)
   if (process.exitCode !== 1) log('PASS：三层 + 改造 + 舰队科技落盘，join 断言全通过')
 }
 
@@ -303,9 +360,12 @@ switch (cmd) {
     await cmdValidate()
     break
   case 'normalize':
-    cmdNormalize()
+    cmdNormalize(process.argv.slice(2))
+    break
+  case 'emit':
+    cmdEmit()
     break
   default:
-    log('用法: pipeline <--selfcheck|fetch|validate|normalize>')
+    log('用法: pipeline <--selfcheck|fetch|validate|normalize [--seq N]|emit>')
     process.exitCode = 2
 }

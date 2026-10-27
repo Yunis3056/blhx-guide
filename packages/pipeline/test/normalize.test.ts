@@ -13,8 +13,8 @@ import { readGametip } from '../src/display/gametip.ts'
 import { loadFactions, factionMap } from '../src/display/factions.ts'
 import { loadRarityDecl, buildShipRarity, rarityLabels } from '../src/display/rarity.ts'
 
-const RAW = join(import.meta.dirname!, '..', '..', '..', 'data', 'raw')
-const ROOT = join(import.meta.dirname!, '..', '..', '..')
+const RAW = join(import.meta.dirname, '..', '..', '..', 'data', 'raw')
+const ROOT = join(import.meta.dirname, '..', '..', '..')
 const SHA_FILE = join(RAW, 'CURRENT_SHA')
 const sha = existsSync(SHA_FILE) ? readFileSync(SHA_FILE, 'utf8').trim() : null
 const dir = sha ? join(RAW, sha) : null
@@ -45,7 +45,7 @@ function build() {
 test('三层粒度：859 条目 / 3,429 阶段行 / 2,730 皮肤，且每条船都能渲染', { skip }, () => {
   const { built } = build()
   assert.equal(built.ships.length, 859)
-  assert.equal(built.stages.length, 3429)
+  assert.equal(built.stages.length, 3427)
   assert.equal(built.skins.length, 2730)
   assert.equal(built.ships.filter((s) => s.rarity === null).length, 0, '有船取不到稀有度')
   assert.equal(built.ships.filter((s) => s.rarityLabel === null).length, 0, '有船取不到稀有度文本')
@@ -136,6 +136,13 @@ test('非阶段行只进隔离清单，不混进三层数据', { skip }, () => {
   const { built } = build()
   assert.equal(built.stages.filter((s) => s.rowId - s.skinId < 1 || s.rowId - s.skinId > 4).length, 0)
   assert.equal(built.quarantine.filter((q) => q.kind === 'non_stage_ship_row').length, 528)
+  // 表里 3,429 行阶段行，剔掉属于 352 个孤儿 group 的 skin 900424 那 2 行才是页面的数据；
+  // 隔离清单按 skin_id 聚合成 1 条，detail 里记着行数
+  const orphanStage = built.quarantine.filter((q) => q.kind === 'stage_row_orphan_group')
+  assert.equal(orphanStage.length, 1)
+  assert.equal(orphanStage[0]?.key, '900424')
+  assert.match(orphanStage[0]?.detail ?? '', /^2 行阶段行/)
+  assert.equal(3429 - built.stages.length, 2)
   assert.equal(built.quarantine.filter((q) => q.kind === 'voice_actor_missing').length, 0, 'CV 哨兵 0 / -1 不该被当缺失')
   assert.ok(built.skins.every((s) => s.voiceActor === null || s.voiceActor.length > 0))
 })

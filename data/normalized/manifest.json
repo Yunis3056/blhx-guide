@@ -1,0 +1,66 @@
+{
+  "dataSha": "4cca5c2437007b62d30a6235fcfc0c0203231378",
+  "snapshotSeq": 0,
+  "server": "CN",
+  "tier": [
+    "A"
+  ],
+  "files": {
+    "ships.jsonl.gz": {
+      "rows": 859,
+      "bytes": 37348,
+      "sha256": "236ac2ca4087db42ac646162f5b42d04c8100c7a0e76600359853b3d5c953bad"
+    },
+    "ship-stages.jsonl.gz": {
+      "rows": 3427,
+      "bytes": 94998,
+      "sha256": "6deee4875231b804ea8c9e24b2fb1c7ac9323265daa3f58464c71d49b3c8b9cf"
+    },
+    "ship-skins.jsonl.gz": {
+      "rows": 2730,
+      "bytes": 67553,
+      "sha256": "fc4997d0594aa5afdca3f0a26faaa820cf3adfc53258499d633ffafdd293e146"
+    },
+    "ship-retrofits.jsonl.gz": {
+      "rows": 106,
+      "bytes": 17958,
+      "sha256": "d00cec2d2409cc652ea8470e901758e40dc9320703c56106d33e0e5175a290fd"
+    },
+    "fleet-tech.jsonl.gz": {
+      "rows": 766,
+      "bytes": 12303,
+      "sha256": "50fbded63e22d2477cb14e0c55991ef3e74d30da7eb954c8c2b6d726c7567ad3"
+    },
+    "enums.jsonl.gz": {
+      "rows": 67,
+      "bytes": 1297,
+      "sha256": "a4edb27bcea8ae57f3e5cf279b32bd27636ec36af81938c41b64daac21fc3981"
+    }
+  },
+  "tableDirs": {
+    "ship_data_group": "ShareCfg",
+    "ship_skin_template": "ShareCfg",
+    "ship_data_statistics": "sharecfgdata",
+    "ship_data_template": "sharecfgdata",
+    "ship_data_breakout": "sharecfgdata",
+    "attribute_info_by_type": "ShareCfg",
+    "ship_data_by_type": "ShareCfg",
+    "gametip": "sharecfgdata",
+    "voice_actor_CN": "ShareCfg",
+    "skill_data_template": "ShareCfg",
+    "enemy_data_statistics": "ShareCfg",
+    "transform_data_template": "ShareCfg",
+    "ship_data_trans": "ShareCfg",
+    "technology_data_template": "ShareCfg",
+    "equip_data_statistics": "sharecfgdata",
+    "equip_data_template": "sharecfgdata",
+    "equip_data_by_type": "ShareCfg",
+    "name_code": "ShareCfg",
+    "memory_storyline": "ShareCfg",
+    "equip_data_by_quality": "ShareCfg",
+    "fleet_tech_group": "ShareCfg",
+    "fleet_tech_template": "ShareCfg",
+    "fleet_tech_ship_class": "ShareCfg",
+    "fleet_tech_ship_template": "ShareCfg"
+  }
+}

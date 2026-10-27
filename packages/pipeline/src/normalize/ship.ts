@@ -1,7 +1,7 @@
 import { TABLES, relPath } from '../tables.ts'
 import { readTable } from '../fetch/fetch.ts'
 import { toNamed, type AttrMap } from './attr-map.ts'
-import { groupStageRows, isStageRow, readShipRows, stageIndexOf, type ShipRow } from './stage-rows.ts'
+import { groupStageRows, isStageRow, readShipRows, stageIndexOf } from './stage-rows.ts'
 import { resolveName, type NameCodeMap } from './name-code.ts'
 import type { FactionEntry } from '../display/factions.ts'
 
@@ -198,6 +198,10 @@ export function buildShipRecords(root: string, sha: string, input: ShipInput): {
   const stages: ShipStageRecord[] = []
   const rarityByGroup = new Map<number, number>()
   const englishByGroup = new Map<number, string>()
+  // 图鉴白名单：阶段行按表切是 3,429 行 / 860 个 skin_id，但其中 skin 900424 的
+  // 2 行属于 352 个孤儿 group 之一（§11 B 不为孤儿建页），归一化层要先剔掉，
+  // 否则 ship_stage 的外键指向一组不存在的页面。
+  const whitelist = new Set(Object.values(groups).map((g) => g.group_type as number))
   for (const [skinId, rows] of stageGroups) {
     const seen = new Set<number>()
     for (const r of rows) if (typeof r.rarity === 'number') seen.add(r.rarity)
@@ -212,6 +216,14 @@ export function buildShipRecords(root: string, sha: string, input: ShipInput): {
       continue
     }
     if (rarity !== undefined) rarityByGroup.set(groupType, rarity)
+    if (!whitelist.has(groupType)) {
+      quarantine.push({
+        kind: 'stage_row_orphan_group',
+        key: String(skinId),
+        detail: `${rows.length} 行阶段行属于 group ${groupType}，不在 ship_data_group 的 859 条里`,
+      })
+      continue
+    }
     for (const r of rows) {
       if (r.english_name && !englishByGroup.has(groupType)) englishByGroup.set(groupType, r.english_name)
       const named = (a: readonly number[] | undefined): Record<string, number> => toNamed(input.attrMap, a)

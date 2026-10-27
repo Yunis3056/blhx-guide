@@ -16,16 +16,18 @@
       "cache": false,
       "description": "仅 data-sync workflow 显式调用；任何 build 任务都不得依赖它，否则构建期会访问业务数据源（违反 PLAN §核心原则2）"
     },
+    "pipeline#normalize": {
+      "cache": false,
+      "description": "读 data/raw（不入库，检出里没有），产出 data/normalized/*.jsonl.gz + manifest.json 后由 data-sync 作业提交入库。人工表 data/manual/** 在这一步被消费，效果固化进 jsonl，所以 emit 与 web#build 都不必再声明它"
+    },
     "pipeline#emit": {
       "description": "只读仓库内已提交的 data/normalized，不取数、不联网",
       "inputs": [
         "$TURBO_ROOT$/data/normalized/**",
-        "$TURBO_ROOT$/data/manual/**",
-        "$TURBO_ROOT$/data/snapshots/index.json",
         "$TURBO_ROOT$/packages/pipeline/src/**",
         "$TURBO_ROOT$/packages/pipeline/package.json"
       ],
-      "outputs": ["$TURBO_ROOT$/apps/web/public/data/**"]
+      "outputs": ["$TURBO_ROOT$/data/al.sqlite"]
     },
     "web#build": {
       "dependsOn": ["pipeline#emit"],

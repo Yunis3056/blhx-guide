@@ -215,7 +215,7 @@ blhx-guide/
 │   └── out/
 ├── data/
 │   ├── normalized/                        # ★ 入库：Pages 构建的唯一数据源
-│   │   ├── manifest.json                  #   dataSha / syncedAt / snapshotSeq / counts
+│   │   ├── manifest.json                  #   dataSha / snapshotSeq / files / tableDirs（无墙上时间）
 │   │   ├── ships.jsonl.gz
 │   │   ├── ship-stages.jsonl.gz
 │   │   ├── ship-skins.jsonl.gz
@@ -956,13 +956,13 @@ META
 
 ```jsonc
 // data/normalized/manifest.json —— 入库，Pages 构建的唯一数据源
+// 由 pipeline#normalize 生成，构建期只读不写；字段必须全部由数据内容决定
 {
   "dataSha":     "4cca5c2437007b62d30a6235fcfc0c0203231378",
-  "syncedAt":    "2026-10-26T19:00:00Z",
   "snapshotSeq": 47,                       // 单调递增，可排序
   "server":      "CN",
   "tier":        ["A","B"],
-  "counts":      { "ship": 859, "shipStage": 3429, "shipRowOther": 528, "shipSkin": 2730,
+  "counts":      { "ship": 859, "shipStage": 3427, "shipRowOther": 528, "shipSkin": 2730,
                    "retrofit": 106, "equipment": 909, "equipIconFamily": 558,
                    "skill": 3030, "chapter": 981, "expedition": 15515,
                    "dropEntry": 64963, "item": 3030, "research": 42,
@@ -976,7 +976,7 @@ META
 }
 ```
 
-版本比较一律用 `snapshotSeq` 与 `syncedAt`；`dataSha` 只做来源追溯，**不可用于判序**。
+版本比较一律用 `snapshotSeq` 判序；`dataSha` 只做来源追溯，**不可用于判序**。同步的墙上时间不进这个文件——`data/normalized/**` 是 `pipeline#emit` 的输入指纹，掺时间戳等于「数据没变也整站重建」（实测过一版带 `syncedAt` 的 manifest：同一份数据重跑一次 normalize，建库缓存 key 就换一个）。时刻记在 `data/snapshots/index.json` 台账，那里不进指纹。
 
 diff 输出：`addedShips[]` `changedShips[]` `removedShips[]` `addedSkins[]` `addedEquips[]` `changedEquips[]` `addedChapters[]` `enumChanges[]`（新舰种/新阵营）
 
@@ -1096,7 +1096,18 @@ export function getItemDrops(expeditionIds: number[]): DropRow[]
 export function getSourcesForItem(itemId: number): ChapterSource[]
 ```
 
-所有 SQL 集中在 `lib/queries/`，页面不写 SQL。客户端 JSON：
+所有 SQL 集中在 `lib/queries/`，页面不写 SQL。
+
+库结构在 `packages/pipeline/src/store/schema.ts`（`SCHEMA_VERSION = 1`，16 表，`data/al.sqlite` 2.83 MiB）。三条约束是实测出来的，不是设计偏好：
+
+- 属性走窄表 `ship_stage_attr(group_type, stage, attr, base, growth, growth_extra)`，`attr` 取值即 `attr_def.name`。不用 3×12 列宽表：定义表多一项属性时宽表要改 DDL，窄表只多一行
+- 全部行在**单个事务**里插完，41,124 行属性逐条自动提交时 `emit` 超过两分钟没跑完就被杀；同一步骤里逐表核对「jsonl 行数 == 表行数」，末尾断言 `PRAGMA integrity_check = ok`
+- `meta` 只写 `schema_version` / `data_sha` / `count:*`，不写任何时间。时间戳会直接摧毁「同数据两次建库逐字节相同」这条性质（`data/al.sqlite` 不入库，靠这条性质保证缓存与 CI 产物可复现）
+- 外键常开，且测试真去撞它：往 `ship_stage` 插一个不存在的 `group_type` 必须 `FOREIGN KEY constraint failed`。阶段行孤儿 group 是在 normalize 层处理的（2 行进隔离清单），不是靠放宽约束
+
+实测读路径（`packages/pipeline/test/store.test.ts` 逐条钉住，不是示例代码）：`20502` → 厌战 / 皇家 / 超稀有 / 战列 / main；耐久突破曲线 `1298 → 1615 → 2248 → 3197`；该组 5 行皮肤，规范名取 `skin_type = -1` 行，另含改造皮肤「厌战.改」；`ship_source.command = 'SHIPBLUEPRINT'` 42 条；筛选面板基数 `nationality=97`（META）59 条、`98`（布里）3 条、`has_retrofit=1` 106 条；`fleet_tech_ship.group_type=10102` 的舰级名是「法拉格特级」。
+
+客户端 JSON：
 
 ```
 /public/data/ships.index.json      ~300KB gzip   列表页筛选
@@ -1477,8 +1488,10 @@ Env               NODE_VERSION=24
 顺序（**构建阶段不访问业务数据源**，且顺序不可调换）：
 
 ```
-1. 解压 data/normalized/*.jsonl.gz
-2. 建 data/al.sqlite（确定性重建）
+1. 核对 data/normalized/manifest.json：文件集合与每个 gz 的 sha256 逐个对上
+   （manifest 与 jsonl 都是入库文件，只改其一 = 页面用旧数据，必须在建库前拦住）
+2. 解压 data/normalized/*.jsonl.gz → 建 data/al.sqlite
+   （确定性重建；库内 meta 不写时间戳，只写 schemaVersion / dataSha / 逐表行数）
 3. 导出客户端 JSON 与搜索索引 → apps/web/public/data/    ← 必须在 build 之前
 4. next build（generateStaticParams 全量预渲染）
 5. 生成 sitemap.xml / RSS / OG 图
@@ -1487,6 +1500,8 @@ Env               NODE_VERSION=24
    - 单文件 > 25 MiB → 失败
    - 首屏 JS 超预算 → 失败
 ```
+
+第 1–3 步都不读 `data/raw/`——raw 不入库，Pages 的检出里没有它；构建期需要的来源标识从 `manifest.json` 取。
 
 第 3 步在 `next build` 之前是必需的：`public/` 在构建时被复制进 `out/`，构建后再写 `public/` 不会进入产物。第 6 步必须在最后，否则测不到真实产物。
 
@@ -1670,13 +1685,13 @@ jobs:
 | # | 任务 | 产出 |
 |---|---|---|
 | 1.1 | GitHub 仓库 + Pages 项目（preset None、`NODE_VERSION=24`）+ `corepack enable` | 空站可部署 |
-| 1.2 | Monorepo 脚手架（pnpm workspace + turbo + tsconfig strict + eslint + prettier） | `pnpm build` 空跑通 |
+| 1.2 | Monorepo 脚手架（pnpm workspace + turbo + tsconfig strict + eslint + prettier） | `pnpm build` 空跑通；实测：`turbo 2.11.10` + `pnpm 9.15.4`（corepack 需 `corepack enable --install-directory` 把 pnpm 落到 PATH 上，否则 turbo 报 `Unable to find package manager binary`）；tsconfig 另开 `noUnusedLocals` / `noUnusedParameters`（一开就抓到 3 处死导入）；ESLint 9 用根级 `eslint.config.mjs` + `typescript-eslint`，包内 `lint` 脚本才有配置可读 |
 | 1.3 | `tables.ts` 表注册表：**24 组同名互补表的目录解析**（§3.4）+ 分档 + **逐表条目数下限断言**；codeload fetch + SHA 落盘 + OID 变更判定 | `data/raw/<sha>/` |
 | 1.4 | A 档舰船相关表 Zod schema + fixtures 回归 | 校验通过 |
 | 1.5 | `attr-map.ts` 由 `attribute_info_by_type` 生成 + 与 `enemy_data_statistics` 键集交叉断言 | 属性定义落地 |
 | 1.6 | `data/manual/factions.json`（29 条，`nationality → wordKey → slug`）与 `data/manual/rarity.json`（两段声明）；显示名与标签构建期从 gametip 读回并逐条比对 | 阵营覆盖 + 稀有度取值域两侧对齐 + 船名占位全解析 |
-| 1.7 | normalize 三层 + 改造 + 舰队科技（`ship` / `ship_stage` / `ship_skin` / `ship_retrofit` / `fleet_tech`），全部 join 断言内置 | 实测 859 / 3,429 / 2,730 / 106 / (4+36+726)，产物 224.8KB gz |
-| 1.8 | emit JSONL → 建 SQLite | `data/al.sqlite` 可查 |
+| 1.7 | normalize 三层 + 改造 + 舰队科技（`ship` / `ship_stage` / `ship_skin` / `ship_retrofit` / `fleet_tech`）+ 枚举表 + `manifest.json`，全部 join 断言内置 | 实测 859 / **3,427**（表内阶段行 3,429，skin 900424 的 2 行属于 352 个孤儿 group 之一，进隔离清单不入库）/ 2,730 / 106 / (4+36+726)，产物 226.0KB gz，隔离清单 529 条 |
+| 1.8 | emit JSONL → 建 SQLite（16 表、外键常开、逐表行数与 jsonl 对账、`PRAGMA integrity_check`） | `data/al.sqlite` 2.83 MiB 可查：ship 859 · ship_stage 3,427 · ship_stage_attr 41,124 · ship_skin 2,730 · orphan_skin 358 · ship_source 1,432 · retrofit_node 1,217 · fleet_tech_ship 726；两次建库逐字节相同；建库 < 1s；`$TURBO_ROOT$` 输入指纹按 §6.5 实测表逐条通过 |
 | 1.9 | 图片：1 艘船的 icon + 默认立绘 + 1 张换装，**skinId 精确 join** → sharp → LocalAdapter（**仅本地验证，不上线**） | `data/images/` |
 | 1.10 | Next.js 脚手架 + `/ship/[groupType]`（**仅 1 艘**）+ §4.6 全部配置项 | 1 个静态页 |
 | 1.11 | 部署 Pages（**无图版本**，立绘位置渲染占位块） | 线上可访问，首个 200 |
@@ -1686,7 +1701,7 @@ jobs:
 
 ### 阶段 2 · 舰船图鉴全量
 
-- 扩至 859 条目 / 3,429 阶段行（860 个 skin_id）/ 2,730 皮肤；落实正向枚举过滤（阶段 1 已跑通，见 §7 1.7 实测行）
+- 扩至 859 条目 / 3,427 阶段行入库（表内阶段行 3,429，覆盖 860 个 skin_id，其中 2 行属孤儿 group 进隔离清单）/ 2,730 皮肤；落实正向枚举过滤（阶段 1 已跑通，见 §7 1.7 实测行）
 - 详情页完整：六维雷达、**1–100 级**属性曲线（含 `attrs_growth_extra`，见 §3.7）、突破表、装备位与效率、**技能名与描述文本**（buff 机制与触发数值不在范围，§8.2）、皮肤画廊、改造分支、舰队科技点、**语音文本**（B 档 `ship_skin_words`）、获取方式（含跳转文案）
 - 隔离清单落地（同 `skin_id` 多船名的处理）
 - `/ship` 全量交互筛选（阵营 / 舰种 / 站位 / 稀有度 / 图鉴分类 / 获取方式 / 排序），URL 可分享，query 变体 canonical
@@ -1754,34 +1769,31 @@ jobs:
 | 代码版本与数据版本不匹配 | — | — | `data/snapshots/index.json` 里同时记 `schemaVersion` 与 `pipelineVersion`；`web#build` 断言当前代码的 `schemaVersion` ≥ 快照声明值，否则明确报错要求同代代码，不静默渲染错列 |
 
 Pages 侧另用「回滚到历史部署」作为秒级预案。两者是不同层次，runbook 分开写：部署回滚不动数据，数据回滚要重建。
-- Turborepo 缓存边界必须显式定义，否则会复用上一次构建的 `public/` 与 `out/`：
-  ```jsonc
-  // turbo.json
-按 Turborepo 规则，task 的 `inputs`/`outputs` **相对于该 task 所在的 `package.json`**，不是仓库根。因此仓库级路径必须带 `$TURBO_ROOT$`，包内路径不带包名前缀：
+按 Turborepo 规则，task 的 `inputs`/`outputs` **相对于该 task 所在的 `package.json`**，不是仓库根：仓库级路径必须带 `$TURBO_ROOT$`，包内路径不带包名前缀。写错的两种症状是「缓存永不命中」和「复用了错的东西」，都表现为构建成功但页面是旧数据。下面是已落地并实测过的定义：
 
 ```jsonc
-// turbo.json —— 修正前把仓库路径直接写进了包任务，
-// 结果是 pipeline#emit 读 packages/pipeline/data/normalized/**（不存在），
-// web#build 的产物声明成 apps/web/apps/web/out/**（也不存在），缓存永不命中或复用了错的东西。
+// turbo.json
 {
   "tasks": {
+    // 取数与归一化都不进缓存：fetch 每次真取；normalize 读 data/raw（不入库，
+    // CI 与 Pages 的检出里没有它），人工表 data/manual/** 也只在这一步被消费
+    "pipeline#fetch":     { "cache": false },
+    "pipeline#normalize": { "cache": false },
+
     "pipeline#emit": {
-      "dependsOn": ["^build"],
       "inputs": [
-        "$TURBO_ROOT$/data/normalized/**",     // 仓库级：跨包读取
-        "$TURBO_ROOT$/data/manual/**",         // 人工表改了必须重算
-        "$TURBO_ROOT$/data/snapshots/index.json",
-        "src/**", "package.json"
+        "$TURBO_ROOT$/data/normalized/**",       // 仓库级：跨包读取，含 manifest.json
+        "$TURBO_ROOT$/packages/pipeline/src/**",
+        "$TURBO_ROOT$/packages/pipeline/package.json"
       ],
-      "outputs": ["$TURBO_ROOT$/apps/web/public/data/**"]   // 产物落在别的包，必须用根路径
+      // 产物落在输入集合之外：建库任务不读自己写的文件，指纹不会被自引用搅浑
+      "outputs": ["$TURBO_ROOT$/data/al.sqlite"]
     },
     "web#build": {
       "dependsOn": ["pipeline#emit"],          // ← 缺这行就会与 emit 并行，读到旧 public/data
       "inputs": [
-        "$TURBO_ROOT$/data/normalized/**",
-        "$TURBO_ROOT$/data/manual/**",
         "$TURBO_ROOT$/data/al.sqlite",         // 实际读的库，不声明就不进指纹
-        "$TURBO_ROOT$/apps/web/public/data/**",
+        "$TURBO_ROOT$/apps/web/public/data/**",// 客户端 JSON 与搜索索引，同样是传递产物
         "app/**", "components/**", "content/**", "lib/**",
         "next.config.ts", "tsconfig.json", "package.json",
         "$TURBO_ROOT$/packages/ui/**"          // 共享组件包
@@ -1793,9 +1805,27 @@ Pages 侧另用「回滚到历史部署」作为秒级预案。两者是不同�
 }
 ```
 
-`pipeline#fetch` 标 `"cache": false`（每次真取）。`output` 路径写错的症状是「改了数据页面没变」，所以 §7 阶段 5 的验收里加一条：**故意只改 `data/manual/factions.json` 的一个字，清缓存前后必须看到页面文本变化**，用来证明 `$TURBO_ROOT$` 输入确实进了指纹。
-  ```
-  `pipeline#fetch` **不进缓存**（每次真取）；`web#build` 的 inputs 必须含 `data/normalized` 的传递产物 `apps/web/public/data/**`，否则改了数据没重建页面。
+`pipeline#emit` 不读 `data/manual/**`，也不读 `data/raw/**`：它只把已提交的 `data/normalized/*.jsonl.gz` 灌进 SQLite。人工表进站点的唯一路径是
+
+```
+data/manual/**  →(pipeline#normalize, cache:false)→  data/normalized/*.jsonl.gz + manifest.json
+                →(pipeline#emit)→  data/al.sqlite  →(web#build)→  页面文本
+```
+
+所以人工表不声明成 emit / `web#build` 的输入：声明了也不读，只会得到一个「缓存未命中但产物逐字节相同」的假验证，把真正的消费点（normalize）藏起来。
+
+**`$TURBO_ROOT$` 指纹实测**（2026-10-27，本机，`pipeline#emit` 的 turbo 缓存 key）：
+
+| 动作 | 结果 |
+| --- | --- |
+| 数据不动，重复 `normalize` + `emit` | `cache hit`，key 恒为 `4d803daa82b5a5b2` |
+| 只改 `data/manual/factions.json` 一个 slug，**不跑** normalize 直接 `emit` | `cache hit`（人工表不在建库输入里，符合上面的链路） |
+| 同一次改动后跑 `normalize` 再 `emit` | `cache miss`，key `4e0bdd2e8648089a`，且 `SELECT slug FROM faction WHERE nationality=1` 返回改后的值 |
+| 还原那一个字符，`normalize` + `emit` | `cache hit`，回到 `4d803daa82b5a5b2` |
+
+最后一行是这个实验真正要证的性质：**缓存 key 是数据内容的函数**。同一份数据无论从哪条路径绕回来，都映射到同一个 key；改一个字节就立刻换 key 并让页面文本跟着变。
+
+由此得出一条约束：`manifest.json` 里不能有墙上时间。带 `syncedAt` 的那版实测过——数据一模一样、只是重跑了一次 normalize，建库 key 就换了，等于每天定时同步都在无意义地重建整站。同步时刻记在 `data/snapshots/index.json`，那个文件不进任何构建指纹。
 
 **验收**（全部机器化，不接受人工目测）：连续 7 天无人工干预；上游更新后 24 小时内站点自动跟进并产出更新公告；`git checkout data/<seq-1> -- data/normalized && pnpm build && wrangler pages deploy` 演练一次成功且页面数据确回到旧值；`out/` 文件数与 `generateStaticParams` 声明的路由数逐一相等（§4.6）；`apps/web/out` 内 grep 不到任何 `/_next/image`；冷构建时长与产物数写入 `docs/baseline.md` 作为后续基准。
 

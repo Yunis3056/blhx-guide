@@ -1,5 +1,4 @@
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { dirname, join, basename } from 'node:path'
 
@@ -115,17 +114,20 @@ export function extractWhitelist(params: {
   const { tgzPath, sha, whitelist, tree, outRoot } = params
   const byPath = new Map(tree.map((e) => [e.path, e]))
 
-  for (const p of whitelist) {
+  // 先把「白名单 ∩ tree」坐实：缺一条就中止，后面解包与 OID 登记共用同一份结果
+  const entries = whitelist.map((p) => {
     if (FORBIDDEN.includes(p)) throw new Error(`${p} 属禁止取用清单`)
-    if (!byPath.has(p)) {
+    const e = byPath.get(p)
+    if (!e) {
       throw new Error(
         `白名单路径 ${p} 不在固定提交 ${sha.slice(0, 8)} 的 tree 清单里。` +
           `白名单写错或上游删了表 —— 中止，不静默跳过`,
       )
     }
-  }
+    return { p, e }
+  })
 
-  const members = whitelist.map((p) => `${topDir(sha)}/${p}`)
+  const members = entries.map(({ p }) => `${topDir(sha)}/${p}`)
   // 只给 tar 相对路径 + 用 cwd 定位，这是本机实测出来的结论。
   // 传 Windows 绝对路径进去，MSYS tar 会把 argv 搅成
   //   E\:\agents\\qoder\data\raw\004cca5c…  Cannot open: No such file or directory
@@ -147,18 +149,17 @@ export function extractWhitelist(params: {
   }
 
   const oids: Record<string, string> = {}
-  for (const p of whitelist) {
+  for (const { p, e } of entries) {
     const abs = join(outRoot, topDir(sha), p)
     if (!existsSync(abs)) {
       throw new Error(
         `解包后文件缺失：${abs}。tar 退出码 0 却没写出文件，是 MSYS 路径翻译的典型症状`,
       )
     }
-    const entry = byPath.get(p)!
     // 大文件（>100MB）Git 不一定能在本地即时核对 OID，这里只校验存在与可解析；
     // 真正的变更判定用 tree 里的 OID 做集合差（见 snapshot-fingerprint.ts）
     JSON.parse(stripBom(readFileSync(abs, 'utf8')))
-    oids[p] = entry.sha
+    oids[p] = e.sha
   }
   return oids
 }
@@ -171,8 +172,4 @@ export function readTable(outRoot: string, sha: string, rel: string): unknown {
   const p = join(outRoot, topDir(sha), rel)
   if (!existsSync(p)) throw new Error(`未取到 ${rel}（应为 ${p}）`)
   return JSON.parse(stripBom(readFileSync(p, 'utf8')))
-}
-
-export function sha256File(p: string): string {
-  return createHash('sha256').update(readFileSync(p)).digest('hex')
 }

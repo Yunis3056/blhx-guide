@@ -2,9 +2,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { TABLES, assertSpec, relPath } from '../src/tables.ts'
+import { TABLES, assertSpec } from '../src/tables.ts'
 
-const RAW = join(import.meta.dirname!, '..', '..', '..', 'data', 'raw')
+const RAW = join(import.meta.dirname, '..', '..', '..', 'data', 'raw')
 const SHA_FILE = join(RAW, 'CURRENT_SHA')
 
 const sha = existsSync(SHA_FILE) ? readFileSync(SHA_FILE, 'utf8').trim() : null
