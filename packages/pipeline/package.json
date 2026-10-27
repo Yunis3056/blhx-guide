@@ -13,11 +13,12 @@
     "validate": "node --experimental-strip-types src/cli.ts validate",
     "normalize": "node --experimental-strip-types src/cli.ts normalize",
     "emit": "node --experimental-strip-types src/cli.ts emit",
-    "db": "node --experimental-strip-types src/cli.ts db",
+    "images": "node --experimental-strip-types src/cli.ts images",
     "verify": "node --experimental-strip-types src/cli.ts verify"
   },
   "dependencies": {
     "pinyin-pro": "^3.26.0",
+    "sharp": "^0.35.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {

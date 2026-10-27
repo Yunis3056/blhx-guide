@@ -1,7 +1,10 @@
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TABLES, assertSpec, relPath, type TableKey } from './tables.ts'
-import { buildDatabase } from './store/build.ts'
+import { buildDatabase, readJsonl, FILES } from './store/build.ts'
+import type { ShipRecord, ShipSkinRecord } from './normalize/ship.ts'
+import { buildImages, unitsForShip, type Unit } from './images/pipeline.ts'
+import { enRepoId } from './images/en-repo.ts'
 import { STAGE1_TABLES, whitelistFor, STUB_PROBES } from './whitelist.ts'
 import { resolveSha, downloadTarball, fetchTree, extractWhitelist, readTable, topDir } from './fetch/fetch.ts'
 import { buildAttrMap, assertMatchesEnemy, assertArrayLength } from './normalize/attr-map.ts'
@@ -23,6 +26,22 @@ const RAW = join(ROOT, 'data', 'raw')
 
 function log(msg: string): void {
   process.stdout.write(msg + '\n')
+}
+
+/** `--k v` 与 `--k=v` 都认：PLAN 里的调用示例写的是 `--limit=1`，只支持一种写法就是自找故障 */
+function flagValue(argv: readonly string[], name: string): string | null {
+  const eq = argv.find((a) => a.startsWith(`${name}=`))
+  if (eq !== undefined) return eq.slice(name.length + 1)
+  const i = argv.indexOf(name)
+  return i >= 0 ? (argv[i + 1] ?? null) : null
+}
+
+const intFlag = (argv: readonly string[], name: string, def: number): number => {
+  const raw = flagValue(argv, name)
+  if (raw === null) return def
+  const n = Number(raw)
+  if (!Number.isInteger(n)) throw new Error(`${name} 需要整数，实得 ${raw}`)
+  return n
 }
 
 async function cmdFetch(): Promise<void> {
@@ -205,15 +224,71 @@ function cmdEmit(): void {
 }
 
 /**
- * 1.7 归一化三层 + 改造 + 舰队科技 → data/normalized/*.jsonl.gz
+ * 1.9 图片本地链路：skinId 精确 join EN 源 → 三级回退 → sharp 编码 → LocalAdapter。
  *
- * 这一步不写 manifest（1.8），但已经带上全部 join 断言：任何一侧对不上就中止，
- * 产出的文件永远是「完整且自洽」的，不会出现在线页面缺半列的情况。
+ * 只在本地与 en-images-sync 作业里跑，绝不进构建链（核心原则 2）。
+ * 授权门槛（§8.5）未过之前产物只落在 data/images/（不入库），清单落 data/images.manifest.json。
+ */
+async function cmdImages(argv: string[]): Promise<void> {
+  const limit = intFlag(argv, '--limit', 1)
+  if (limit < 1) throw new Error(`--limit 必须是正整数，实得 ${limit}`)
+  const onlyGroup = intFlag(argv, '--group', -1)
+
+  const normDir = join(ROOT, 'data', 'normalized')
+  const ships = readJsonl<ShipRecord>(normDir, FILES.ships).sort((a, b) => a.groupType - b.groupType)
+  const skins = readJsonl<ShipSkinRecord>(normDir, FILES.skins)
+  const skinsByGroup = new Map<number, ShipSkinRecord[]>()
+  for (const s of skins) {
+    const list = skinsByGroup.get(s.groupType)
+    if (list) list.push(s)
+    else skinsByGroup.set(s.groupType, [s])
+  }
+
+  const targets =
+    onlyGroup < 0 ? ships.slice(0, limit) : ships.filter((s) => s.groupType === onlyGroup)
+  if (targets.length === 0) {
+    throw new Error(onlyGroup < 0 ? 'normalized 里没有舰船记录' : `group_type ${onlyGroup} 不在图鉴里`)
+  }
+
+  const units: Unit[] = []
+  for (const t of targets) {
+    if (t.defaultSkinId === null) throw new Error(`group ${t.groupType}（${t.name}）没有 skin_type=-1 的规范皮肤`)
+    const alt = (skinsByGroup.get(t.groupType) ?? [])
+      .filter((s) => s.skinId !== t.defaultSkinId)
+      .sort((a, b) => a.skinId - b.skinId)[0]
+    units.push(
+      ...unitsForShip({
+        groupType: t.groupType,
+        defaultSkinId: t.defaultSkinId,
+        altSkinId: alt?.skinId ?? null,
+        name: t.name,
+      }),
+    )
+  }
+
+  const res = await buildImages(ROOT, units)
+  log(`图片源：${enRepoId} @ ${res.enSha.slice(0, 12)}（先锁 SHA 再按 OID 取内容）`)
+  for (const e of res.entries) {
+    const dims = `${e.width}×${e.height}`
+    const kb = (e.bytes / 1024).toFixed(1)
+    log(`  ${e.logical.padEnd(26)} ${e.kind.padEnd(11)} ${dims.padEnd(11)} ${kb.padStart(7)} KB  ${e.source.padEnd(11)} ${e.key}`)
+  }
+  log(
+    `  下载 ${res.fetched} 张，跳过（OID 未变）${res.skipped} 项，降级占位 ${res.misses.length} 项，清单沿用 ${res.carried} 条`,
+  )
+  for (const m of res.misses) log(`  MISS ${m.logical}（skinId ${m.skinId}）：${m.reason}`)
+  log(`  清单 → data/images.manifest.json（台账共 ${res.entries.length + res.carried} 条，无时间戳）`)
+}
+
+/**
+ * 1.7 归一化三层 + 改造 + 舰队科技 → data/normalized/*.jsonl.gz + manifest.json
+ *
+ * 这一步带上全部 join 断言：任何一侧对不上就中止，产出的文件永远是「完整且自洽」的，
+ * 不会出现在线页面缺半列的情况。人工表（data/manual）只在这里被消费。
  */
 function cmdNormalize(argv: string[]): void {
-  const seqIdx = argv.indexOf('--seq')
-  const seq = seqIdx >= 0 ? Number(argv[seqIdx + 1]) : 0
-  if (!Number.isInteger(seq) || seq < 0) throw new Error(`--seq 必须是非负整数，实得 ${argv[seqIdx + 1]}`)
+  const seq = intFlag(argv, '--seq', 0)
+  if (seq < 0) throw new Error(`--seq 必须是非负整数，实得 ${seq}`)
 
   const sha = currentSha()
   const root = join(RAW, sha)
@@ -365,7 +440,10 @@ switch (cmd) {
   case 'emit':
     cmdEmit()
     break
+  case 'images':
+    await cmdImages(process.argv.slice(2))
+    break
   default:
-    log('用法: pipeline <--selfcheck|fetch|validate|normalize [--seq N]|emit>')
+    log('用法: pipeline <--selfcheck|fetch|validate|normalize [--seq N]|emit|images [--limit N|--group G]>')
     process.exitCode = 2
 }

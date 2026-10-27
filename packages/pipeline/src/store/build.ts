@@ -15,12 +15,12 @@ import type { EnumRow } from '../normalize/enums.ts'
  * 而「构建阶段不访问业务数据源」是核心原则。所以这一步能独立跑通，本身就证明
  * 站点数据自洽可重建。
  *
- * 建库不带任何时间戳（时间写在 manifest.json）。一旦 meta 里出现 syncedAt，
- * 同数据两次建库必然不同字节，§6.2 的确定性重建与 §3.12 的哈希校验就只能在
- * 比对逻辑上放宽 —— 那正是「可重放」变成口号的地方。
+ * 建库不带任何时间：meta 里只有 schema_version / data_sha / 逐表行数。一旦 meta 或
+ * 上游 manifest 里出现 syncedAt，同数据两次建库必然不同字节，§6.2 的确定性重建与
+ * §3.12 的哈希校验就只能在比对逻辑上放宽 —— 那正是「可重放」变成口号的地方。
  */
 
-const FILES = {
+export const FILES = {
   ships: 'ships.jsonl.gz',
   stages: 'ship-stages.jsonl.gz',
   skins: 'ship-skins.jsonl.gz',
@@ -29,7 +29,7 @@ const FILES = {
   enums: 'enums.jsonl.gz',
 } as const
 
-function readJsonl<T>(dir: string, file: string): T[] {
+export function readJsonl<T>(dir: string, file: string): T[] {
   const p = join(dir, file)
   if (!existsSync(p)) throw new Error(`缺少 ${p}：先跑 pipeline normalize`)
   return gunzipSync(readFileSync(p))

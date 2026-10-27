@@ -12,6 +12,9 @@ data/al.sqlite-*
 
 # LocalAdapter 输出，不入库（上云走 R2）
 data/images/
+# 无图模式（§8.5 未授权）下台账引用的对象不在任何地方，提交它等于给页面留一批死链；
+# 阶段 3B 图真正上 R2 时随图一起转入库
+data/images.manifest.json
 
 # 探针与临时产物
 .probe-*

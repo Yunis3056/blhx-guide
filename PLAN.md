@@ -242,8 +242,8 @@ blhx-guide/
 │   │   ├── pinyin-overrides.json          #   多音字人工例外（长门=chang2 等）
 │   │   ├── drop-overrides/equipment/      #   人工补的装备本体掉落（按需）
 │   │   └── image-overrides/cn/            #   人工提供的 CN 立绘（按需）
-│   ├── images.manifest.json               # ★ 入库：逻辑名 → 哈希 key → 源 OID
-│   ├── snapshots/<seq>.json               # ★ 入库：递增快照，diff 基准
+│   ├── images.manifest.json               # ✗ 无图模式不入库；阶段 3B 授权转 R2 后随图一起入库
+│   ├── snapshots/index.json               # ★ 入库：snapshotSeq → {commitSHA, dataSha, 清单} 台账，回滚按它取目标
 │   ├── raw/<sha>/                         # ✗ 不入库
 │   ├── al.sqlite                          # ✗ 不入库（构建期重建）
 │   └── images/                            # ✗ 不入库（LocalAdapter 输出）
@@ -558,15 +558,15 @@ fleet_tech_ship_template 726 条  {id, class, max_star, pt_get, pt_level, pt_upg
 
 **join 键是 skin ID，不是 `painting` slug。** EN 仓库 `images/skin/` 以数字 ID 建目录，与 `ship_skin_template.id` 同一命名空间（双方都是 `100000` `100001` `100002` `100010` `100011`…），且 `ship_skin_list.json` 的 `gid` 与 CN `group_type` 完全对齐。纯数字主键匹配，不做字符串匹配。
 
-每个皮肤目录含 6 个已按用途分离的文件：
+每个皮肤目录含 6 个已按用途分离的文件（尺寸为 skinId 205020「厌战」的实测值，跨皮肤差异很大，不能当预算常数）：
 
 ```
-images/skin/{skinId}/painting.png    ~492KB  立绘（→ 600w WebP + 1200w AVIF 源）
-images/skin/{skinId}/shipyard.png    ~80KB   船坞半身像
-images/skin/{skinId}/icon.png        ~21KB   方形头像
-images/skin/{skinId}/qicon.png       ~18KB   Q 版头像
-images/skin/{skinId}/chibi.png       ~26KB   Q 版小人
-images/skin/{skinId}/banner.png      ~31KB   横幅
+images/skin/{skinId}/painting.png    2,107,722 B  立绘（→ 600w WebP + 1200w AVIF 源）
+images/skin/{skinId}/shipyard.png      109,793 B  船坞半身像
+images/skin/{skinId}/icon.png           25,404 B  方形头像
+images/skin/{skinId}/chibi.png          34,069 B  Q 版小人
+images/skin/{skinId}/banner.png         29,779 B  横幅
+images/skin/{skinId}/qicon.png          20,724 B  Q 版头像
 ```
 
 EN 侧 **894 个皮肤组 / 2,613 张皮肤**，CN 侧 859 组 / 2,730 张，约 117 张缺口，逐条比对在首次 backfill 时产出清单。
@@ -604,6 +604,16 @@ portrait  → 600w    WebP q82   <300KB
 portrait  → 1200w   AVIF q70   <350KB   详情页大图，懒加载
 LQIP      → 24w     WebP q30   <2KB     内联 base64，防布局跳动
 ```
+
+**取数与编码实测**（本机，2026-10-28，EN 源锁定 `2d8770b6921d`，该 commit 时间 2026-10-23）：
+
+- 目录定位用 `GET /repos/{owner}/{repo}/git/trees/{enSha}:images/skin/{skinId}`——先锁 commit SHA 再按路径遍历，一次请求只返回一个皮肤目录，**不需要拉 9.91GB 的全树清单**；内容按返回的 blob OID 用 `application/vnd.github.raw` 取，避开 base64 的 33% 膨胀。`raw.githubusercontent.com` 在本机 DNS 阻断，这条 REST 路径是实测唯一通的取图方式
+- 产物实测（2 艘船共 14 个文件、992KB）：icon 96×96 = 3.4–3.7KB；portrait 600w WebP = 83–119KB；portraitHi 1200w AVIF = 70.7–203.7KB；LQIP 24w = 0.7–0.9KB。全部落在上面的预算内，而且**离上限很远**——按源图大小（painting 2.1MB）推产物会得出「必然爆预算」的错误结论，预算要按编码后的实测值守
+- `shipyard.png` 源图 109,793 B 大于产物预算 80KB：预算约束的是出口字节，源图大小只影响下载量，两者不能混谈
+- 源图窄于目标时不插值：skinId 100000 的 painting 是 670×1024，1200w AVIF 出来仍是 670 宽
+- 请求数斜率：1 次 commits + 每个 skinId 1 次列目录 + 每个源文件 1 次取内容 = 2 艘船 6 次。按此推算全量 2,730 皮肤约 8,200 次调用，未认证 60 次/小时不可行、认证 5,000 次/小时也要约 2 小时。**所以首次 backfill 与每日增量走 `git clone --filter=blob:none --sparse` 的 `images/skin` + `images/equipment` 两个 cone，REST 路径只用于小批量、本地验证与缺项补取**
+- 按 OID 跳过实测成立：同一艘船第二次跑，下载 0 张、跳过 7 项，一个 blob 都不取。这条路径在 `test/images.test.ts` 里用覆盖层离线钉住，不受限速影响
+- 清单是全量台账：一次局部重跑只替换自己碰过的逻辑名，其余条目原样留着；漏了这条就会把几百张已编码图的引用擦掉，下次同步全量重下载
 
 **R2 key 规范（内容哈希入文件名）**：
 
@@ -1692,12 +1702,12 @@ jobs:
 | 1.6 | `data/manual/factions.json`（29 条，`nationality → wordKey → slug`）与 `data/manual/rarity.json`（两段声明）；显示名与标签构建期从 gametip 读回并逐条比对 | 阵营覆盖 + 稀有度取值域两侧对齐 + 船名占位全解析 |
 | 1.7 | normalize 三层 + 改造 + 舰队科技（`ship` / `ship_stage` / `ship_skin` / `ship_retrofit` / `fleet_tech`）+ 枚举表 + `manifest.json`，全部 join 断言内置 | 实测 859 / **3,427**（表内阶段行 3,429，skin 900424 的 2 行属于 352 个孤儿 group 之一，进隔离清单不入库）/ 2,730 / 106 / (4+36+726)，产物 226.0KB gz，隔离清单 529 条 |
 | 1.8 | emit JSONL → 建 SQLite（16 表、外键常开、逐表行数与 jsonl 对账、`PRAGMA integrity_check`） | `data/al.sqlite` 2.83 MiB 可查：ship 859 · ship_stage 3,427 · ship_stage_attr 41,124 · ship_skin 2,730 · orphan_skin 358 · ship_source 1,432 · retrofit_node 1,217 · fleet_tech_ship 726；两次建库逐字节相同；建库 < 1s；`$TURBO_ROOT$` 输入指纹按 §6.5 实测表逐条通过 |
-| 1.9 | 图片：1 艘船的 icon + 默认立绘 + 1 张换装，**skinId 精确 join** → sharp → LocalAdapter（**仅本地验证，不上线**） | `data/images/` |
+| 1.9 | 图片：1 艘船的 icon + 默认立绘 + 1 张换装，**skinId 精确 join** → sharp → LocalAdapter（**仅本地验证，不上线**） | 实测 `--limit=1`（group 10000）出 7 个产物、`--group=20502` 再 7 个，共 14 文件 992KB；全部 EN 命中、零降级；第二次跑同一艘船下载 0 张跳过 7 项 |
 | 1.10 | Next.js 脚手架 + `/ship/[groupType]`（**仅 1 艘**）+ §4.6 全部配置项 | 1 个静态页 |
 | 1.11 | 部署 Pages（**无图版本**，立绘位置渲染占位块） | 线上可访问，首个 200 |
 | 1.12 | 冷构建实测：记录产物文件数、构建时长、`out/` 清单；确认 Pages 镜像里 `node:sqlite` 是否需 `NODE_OPTIONS=--experimental-sqlite`；确认 `sharp` 在 Pages Linux 的可用性 | `docs/baseline.md` |
 
-**验收**：线上打开该船页，12 项属性曲线（键名与 `attr_def` 一致）、**1–100 级**成长（不是 125，§3.7）、突破阶段、皮肤列表（含 CV 姓名，不含画师）、改造分支（来自 `trans_*`，§3.5）、科技点、获取方式全部渲染。**图片链路只在本地验收**：`pnpm --filter pipeline images --limit=1` 产出 3 个文件且 skinId 精确命中；线上断链风险通过「阶段 1 不放图」消除，不放线上图片验收项。构建期把 `data/raw` 与业务数据源出口 mock 掉后，`pnpm build` 仍产出与联网时逐字节相同的 `out/`（口径见 §4.6）。1.12 的冷构建数字**只记录不达标线**——此前所有产物数与时长都是推算值，第一次真实构建的目的就是推翻它们。
+**验收**：线上打开该船页，12 项属性曲线（键名与 `attr_def` 一致）、**1–100 级**成长（不是 125，§3.7）、突破阶段、皮肤列表（含 CV 姓名，不含画师）、改造分支（来自 `trans_*`，§3.5）、科技点、获取方式全部渲染。**图片链路只在本地验收**：`pnpm --filter pipeline images --limit=1` 一艘船产出 7 个产物（icon 1 + 默认立绘 3 变体 + 换装立绘 3 变体），逻辑名里的 skinId 与 `ship_skin_template.id` 逐个对得上，且降级占位为 0；线上断链风险通过「阶段 1 不放图」消除，不放线上图片验收项。构建期把 `data/raw` 与业务数据源出口 mock 掉后，`pnpm build` 仍产出与联网时逐字节相同的 `out/`（口径见 §4.6）。1.12 的冷构建数字**只记录不达标线**——此前所有产物数与时长都是推算值，第一次真实构建的目的就是推翻它们。
 
 ### 阶段 2 · 舰船图鉴全量
 
