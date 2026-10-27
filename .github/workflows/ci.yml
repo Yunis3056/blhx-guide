@@ -72,7 +72,10 @@ jobs:
           # 明细打出来：18,000 这条线管的是「路由数 × 2」，只报总数看不出是不是
           # html 与 RSC 载荷成对增长，也分不清构建机差异与产物真的变了
           echo "产物文件数 $n（html $(find apps/web/out -name '*.html' | wc -l) · txt $(find apps/web/out -name '*.txt' | wc -l) · js $(find apps/web/out -name '*.js' | wc -l) · css $(find apps/web/out -name '*.css' | wc -l)）"
-          echo "产物体积 $(du -sh apps/web/out | cut -f1) · 最大单文件 $(find apps/web/out -type f -printf '%s %p\n' | sort -rn | head -1)"
+          echo "产物体积 $(du -sh apps/web/out | cut -f1)（块对齐值，比实际字节高） · 最大单文件 $(find apps/web/out -type f -printf '%s %p\n' | sort -rn | head -1)"
+          # 非路由文件逐个列出来：同一个产物在两台机器上差几个文件时，
+          # 只有总数就查不下去，共享 chunk 是哪些、有没有多出来的一眼能看见
+          find apps/web/out -type f ! -name index.html ! -name index.txt | sort | sed 's|apps/web/out/|  · |'
 
       - name: 每个声明的路由都有 HTML
         run: node scripts/check-routes.mjs
