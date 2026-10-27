@@ -19,6 +19,9 @@ export const STAGE1_TABLES: TableKey[] = [
   'equipStats',
   'equipTemplate',
   'equipByType',
+  'nameCode',
+  'memoryStoryline',
+  'equipByQuality',
 ]
 
 export function whitelistFor(keys: TableKey[]): string[] {

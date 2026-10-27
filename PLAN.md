@@ -234,13 +234,14 @@ blhx-guide/
 │   │   ├── voice-lines.jsonl.gz
 │   │   ├── world.jsonl.gz
 │   │   └── enums.jsonl.gz                 #   舰种/属性/装备分类权威枚举
-│   ├── factions.json                      # ★ 入库：人工维护 nationality → 中文名 → 配色
-│   ├── rarity.json                        # ★ 入库：人工维护，舰船与装备两套独立映射
-│   │                                      #   （不得用 star 推：star 是突破阶段，会随突破变化）
-│   ├── aliases.json                       # ★ 入库：人工维护的别名/昵称表
-│   ├── pinyin-overrides.json              # ★ 入库：多音字人工例外（长门=chang2 等）
-│   ├── drop-overrides/equipment/          # ★ 入库：人工补的装备本体掉落（按需）
-│   ├── image-overrides/cn/                # ★ 入库：人工提供的 CN 立绘（按需）
+│   ├── manual/                            # ★ 入库：人工层。turbo inputs 与回滚集合都按这个目录名引用
+│   │   ├── factions.json                  #   nationality → 词键 → slug；中文名构建期从 gametip 读回比对
+│   │   ├── rarity.json                    #   字段/取值域/标签读法的声明；舰船标签来自 gametip，装备侧无文本源
+│   │   │                                  #   （不得用 star 推：star 是突破阶段，会随突破变化）
+│   │   ├── aliases.json                   #   别名 / 昵称表
+│   │   ├── pinyin-overrides.json          #   多音字人工例外（长门=chang2 等）
+│   │   ├── drop-overrides/equipment/      #   人工补的装备本体掉落（按需）
+│   │   └── image-overrides/cn/            #   人工提供的 CN 立绘（按需）
 │   ├── images.manifest.json               # ★ 入库：逻辑名 → 哈希 key → 源 OID
 │   ├── snapshots/<seq>.json               # ★ 入库：递增快照，diff 基准
 │   ├── raw/<sha>/                         # ✗ 不入库
@@ -268,7 +269,7 @@ blhx-guide/
 | `AzurLaneTools/AzurLaneData` | CN 服解包数据，`CN/` 区 625 文件 / 425.8MB。`CN/sharecfgdata`（**24 表 / 152.4MB**，按等级展开的数值表，全部有数据）+ `CN/ShareCfg`（**593 表 / 92.9MB，其中 24 表是空壳**，余 569 表为主配置与显示文本）+ `CN/GameCfg`（6 表 / 180.5MB，逻辑与剧情）。空壳规律见 §3.4 | 数值与文本的唯一来源 |
 | `Fernando2603/AzurLane` | EN 策展数据集，约 9.91GB，每日 23:00 UTC 同步 | 图片的唯一自动来源 |
 | biligame 碧蓝航线 WIKI | 昵称术语 / 船名对照 / 装备别称 | 别名表来源；独立周级校验对照 |
-| `data/image-overrides/cn/` | 人工提供的 CN 立绘 | 图片最高优先级 |
+| `data/manual/image-overrides/cn/` | 人工提供的 CN 立绘 | 图片最高优先级 |
 
 **`AzurLaneData` 不含任何图片文件**（全树 3,157 条目 = 3,134 blob：3,122 `.json` + 5 `.svg` + 5 `.txt` + 1 `.yml` + 1 `.md`，`.png` / `.webp` / `.ogg` 计数为 **0**，`truncated: false`）。CN 立绘不存在可自动化的公开数据集，获取只能解包客户端（AssetStudio + `AssetBundles/painting`，且立绘是 mesh + texture 分片需按 `.obj` 坐标拼合），手工、不可 CI、每版本重做。因此图片走三级回退（§3.8）而非全量 CN 化。
 
@@ -313,7 +314,7 @@ SHA 必须落盘（`data/raw/<sha>/` 与 manifest），否则 diff 无基准、�
 
 | 档 | 表 | 实测体积 | 实施阶段 |
 |---|---|---|---|
-| **A** | `sharecfgdata`: ship_data_statistics 7.14 · equip_data_template 4.67 · ship_data_template 2.68 · equip_data_statistics 2.60 · ship_data_breakout 1.03 · **gametip 1.06**<br>`ShareCfg`: ship_skin_template 5.9 · skill_data_template 3.35 · ship_data_group 0.57 · skill_data_display 0.26 · fleet_tech_* 0.36 · ship_data_trans 0.08 · ship_data_by_type 0.01 · ship_data_by_star 1.7K · attribute_info_by_type 0.001 · equip_data_by_type 3.6K · equip_data_by_quality 0.8K · equip_data_code 1K · l2dhx 0.5K · painting_filte_map 499K · **illustrator 1.2K · voice_actor_CN 33K** | **~31MB** | 图鉴主线 |
+| **A** | `sharecfgdata`: ship_data_statistics 7.14 · equip_data_template 4.67 · ship_data_template 2.68 · equip_data_statistics 2.60 · ship_data_breakout 1.03 · **gametip 1.06**<br>`ShareCfg`: ship_skin_template 5.9 · skill_data_template 3.35 · ship_data_group 0.57 · skill_data_display 0.26 · fleet_tech_* 0.36 · ship_data_trans 0.08 · ship_data_by_type 0.01 · ship_data_by_star 1.7K · attribute_info_by_type 0.001 · equip_data_by_type 3.6K · equip_data_by_quality 0.8K · equip_data_code 1K · l2dhx 0.5K · painting_filte_map 499K · **illustrator 1.2K · voice_actor_CN 33K · name_code 48.9K · memory_storyline 48.5K** | **~31MB** | 图鉴主线。`name_code` 是船名占位符的解析表（不是可选项，见 §11 J），`memory_storyline` 是数字阵营的唯一文本证据源兼后续剧情层入口 |
 | **B** | `sharecfgdata`: chapter_template 8.84 · chapter_template_loop 6.27 · **expedition_data_template 17.20** · item_data_statistics 2.57 · shop_template 2.22 · **ship_skin_words 6.04**<br>`ShareCfg`: **transform_data_template 0.73（改造节点 1,217 个，改造消耗唯一来源）** · ship_transform 0.01 · box_data_template · drop_data_restore 0.11 · technology_data_template 0.51（科研项目目录）· ship_data_strengthen 0.21 · ship_strengthen_blueprint 0.72 · **ship_data_blueprint 0.06** · skill_need_exp 0.5K · ship_meta_breakout · ship_meta_skilltask 1.34 · enemy_data_statistics 12.9 · enemy_data_by_type · enemy_data_skill | **~63MB** | 关卡掉落、材料计算、语音文本、敌方 |
 | **C** | `sharecfgdata`: weapon_property 21.05 · bullet_template 19.87 · barrage_template 10.24 · aircraft_template 4.15 · spweapon_data_statistics 0.58 · weapon_name 0.13<br>`ShareCfg`: gameset 65K | **~56MB** | 面板估算 |
 | **D** | `sharecfgdata`: world_chapter_template 11.10 · world_event_data 4.56 · world_effect_data 4.11 · activity_coloring_template 3.44 · task_data_template 7.20 · item_virtual_data_statistics 3.66<br>`ShareCfg`: world_* · dorm3d_* · island_* | ~50MB | 大世界、活动、任务 |
@@ -341,7 +342,7 @@ CN/sharecfgdata 文件数        24 / 24 全部有数据
 
 | 表（ShareCfg 侧为 `[]` / `{}`） | 权威侧条目数 | 体积 | 影响 |
 |---|---|---|---|
-| `ship_data_statistics` | 3,957 | 7.14MB | 全部舰船面板（突破阶段行） |
+| `ship_data_statistics` | 3,957 | 7.14MB | 全部舰船面板（**3,429 阶段行 + 528 非阶段行，两套行混排**） |
 | `ship_data_template` | 3,806 | 2.68MB | 舰船基础配置 |
 | `ship_data_breakout` | 3,347 | 1.03MB | 突破材料（**不是改造**，改造见 §3.5 的 `trans_*`） |
 | `ship_skin_words` | 2,485 | 6.04MB | 语音文本 |
@@ -424,7 +425,8 @@ ship_data_group.group_type        859 条   ★ 基船 / 图鉴条目，图鉴�
         ↓ ship_skin_template.ship_group
 ship_skin_template.id           2,730 条   皮肤层（默认立绘 + 换装）
         ↓ ship_data_statistics.skin_id（= 默认皮肤 ID，不是基船 ID）
-ship_data_statistics.id         3,957 行   (船 × 突破阶段) 行
+ship_data_statistics.id         3,957 行   其中 3,429 行是 (船 × 突破阶段) 行（id - skin_id ∈ 1..4），
+                                           另 528 行是展示单位与 NPC 行（§11 A）
 ```
 
 突破阶段是行维度而非皮肤维度，实测每个 `skin_id` 对应的行数分布：
@@ -490,7 +492,7 @@ ship_data_trans     106 条（107 键含 all）{group_id, skin_id, skill_id, tra
 | 属性定义 | `attribute_info_by_type.json` | §3.7 |
 | 装备分类 | `equip_data_by_type.json`（19 数值类 + `all` 哨兵）+ `word_equipment_*`（19 个 UI 标签） | 见 §3.10 |
 | **装备条目** | 族根身份（`base` 为空且自有 `name`）+ `type ∈ equip_data_by_type` + `id ∈ equip_data_template` 三条正向判定，**不含任何 id 数值范围条件** | 909 条（曾用 `id≥10000` 猜范围，得 734，漏 175 条真装备，已废弃） |
-| **稀有度** | 装备侧 `rarity`(1–6) + `equip_data_by_quality`(6 档)；舰船侧权威字段**待实测**，`star` 不得使用 | 见 §8.2 |
+| **稀有度** | 舰船侧：`ship_data_statistics` 阶段行 `rarity`(2–6)，标签 = `gametip` 的 `index_rare{value}`；装备侧：`equip_data_statistics.rarity`(1–6) 有档无名（`equip_data_by_quality` 无显示名字段）。`star` 是突破阶段，不得使用 | 见 §8.2 与 §11 A |
 | 舰船白名单不需要排除法 | 352 个孤儿 `ship_group` 已定性（§11 B） | — |
 
 **不使用** `ship_data_group.hide`（859 行全为 0）与 `redirect_id`（全为 101），二者是常量死字段。
@@ -557,7 +559,7 @@ EN 侧 **894 个皮肤组 / 2,613 张皮肤**，CN 侧 859 组 / 2,730 张，约
 **三个必须绕开的写法**：
 
 1. **不要用 `ship_skin_list.json` 的 `painting` 字段取图**——它是 `https://raw.githubusercontent.com/...` 完整 URL，该域名在开发环境 DNS 阻断。管道必须自己拼 `images/skin/{id}/painting.png`，经 git 或 API blob 接口取。
-2. **阵营图标编号体系不通用**：EN `nationality_icon.json` 键是 `0`–`24`（25 个），CN `ship_data_group.nationality` 是 `1`–`11` / `96`–`115`（28 个）。必须经 `data/factions.json` 显式映射，不能拿数字直接取图。
+2. **阵营图标编号体系不通用**：EN `nationality_icon.json` 键是 `0`–`24`（25 个），CN `ship_data_group.nationality` 是 **1–9、11、96、97、98、101–115 共 28 个离散值**（10 无船，区间也不连续）。必须经 `data/manual/factions.json` 显式映射，不能拿数字直接取图，也不能按区间补全。
 3. **装备图标是族级不是件级，且实测有缺口**：909 条装备族代表行对应 **558 个不同 `icon` 值**（形如 `11000` `12060`，5 位为主），EN `equipment_icon.json` 有 936 个键、`images/equipment/{n}.png`。实测重叠结果：
 
    ```
@@ -572,7 +574,7 @@ EN 侧 **894 个皮肤组 / 2,613 张皮肤**，CN 侧 859 组 / 2,730 张，约
 **三级回退**（`images/resolve.ts`）：
 
 ```
-1. data/image-overrides/cn/{skinId}.png     人工提供的 CN 立绘，最高优先
+1. data/manual/image-overrides/cn/{skinId}.png     人工提供的 CN 立绘，最高优先
 2. Fernando2603 EN 源（skinId 精确匹配）      自动同步，覆盖全量
 3. 内置占位图 + 「暂无立绘」                   兜底，绝不允许图裂
 ```
@@ -914,10 +916,14 @@ META
 | 装备 `base` 成环 / 链深 > 12 | 抛错，中止，附环路径或最深链样本 |
 | 把带 `base` 的行当独立装备条目计入图鉴 | 构建期断言：条目集中每行 `base` 必须为空（§3.10 族根条件） |
 | 改造节点 `use_item` 的 itemId 不在 `item_data_statistics` | warn + 进隔离清单 |
-| 用 `star` 推稀有度 | 禁止。`rarity.json` 分为舰船表与装备表两份，构建期若代码引用 `star` 作为 rarity 输入即失败 |
+| 用 `star` 推稀有度 | 禁止，且有实证：856 组阶段行的 `star` 四行互不相同而 `rarity` 恒定。`rarity.json` 分舰船与装备两段（标签来源不同），构建期若代码引用 `star` 作为 rarity 输入即失败 |
 | 装备 `icon` 在 EN 侧无对应 | warn + 走占位图，不中止（已知 59 族 / 98 条） |
 | `handbook_type` 出现未知值 | 抛错，中止（图鉴分类语义变了） |
 | `nationality` 不在 `factions.json` | 抛错，中止（不允许静默显示未知阵营） |
+| `factions.json` 的 `name` ≠ gametip 的 `word_shipNation_{wordKey}` | 抛错，中止（上游改名或词键接错，整站阵营标签一起错位；文本只从 gametip 渲染，表里的 name 仅用于比对） |
+| 规范名里的 `{namecode:N}` 在 `name_code` 里找不到 | 抛错，中止 —— 1,213 条规范名里 362 条是占位（重樱 / 铁血 / META 为主），漏解就是页面标题带花括号 |
+| 阶段行内部同一 `skin_id` 出现两个 `rarity` | 抛错，中止。判据是先按 `id - skin_id ∈ 1..4` 切行；全表 11 例冲突全部来自把非阶段行算了进来 |
+| 阶段行数 / `skin_id` 数低于基线（3,429 / 860），或 4 行/船占比 < 0.9 | 抛错，中止（`ship_data_statistics` 的行结构语义变了） |
 | 同一 `skin_id` 出现多个不同船名 | warn + 进隔离清单，不静默合并 |
 | `painting` 为空 / EN 侧无对应 skinId | warn + 走占位图，不中止 |
 | `award_display` 的 id 在 `item_data_statistics` 找不到 | warn + 进隔离清单 |
@@ -1018,10 +1024,10 @@ Pages 而非 Workers：A+B 档每日构建约 31 次 × 数分钟，Pages Free �
 
 | 路由 | 说明 | 预计数 |
 |---|---|---|
-| `/ship/faction/[slug]` | 阵营页，slug 与中文名来自 `data/factions.json` | ~28 |
-| `/ship/hull/[type]` | 舰种页（`type_name` 做 slug 与标题） | 21 |
-| `/ship/position/[teamType]` | 站位页：前排 / 后排 / 潜艇 | 3 |
-| `/ship/rarity/[rarity]` | 稀有度页（`data/rarity.json`） | ~5 |
+| `/ship/faction/[slug]` | 阵营页，slug 来自 `data/manual/factions.json`，标题取 gametip 实时文本 | 28（实出值；10 鸢尾教国无船不建页） |
+| `/ship/hull/[type]` | 舰种页：**slug 用数字 `ship_type`，标题用 `type_name`** —— 21 个舰种只有 18 个不同显示名（导驱 20/21 同名、风帆 22/23/24 同名），按名字做 slug 会撞成 18 页 | 21 |
+| `/ship/position/[teamType]` | 站位页：`team_type` ∈ {vanguard, main, submarine}（9 / 9 / 3 个舰种） | 3 |
+| `/ship/rarity/[rarity]` | 稀有度页（`data/manual/rarity.json`，实测阶段行取值 2–6 五档） | 5 |
 | `/ship/category/[handbookType]` | 图鉴分类页：常规 / 联动 / 改造 / META | 4 |
 | `/ship/faction/[slug]/[type]` | 阵营 × 舰种，满足 ≥5 阈值者 | ~60 |
 | `/equipment/category/[type]` | 装备分类页（19 数值类） | 19 |
@@ -1097,8 +1103,8 @@ export function getSourcesForItem(itemId: number): ChapterSource[]
 
 两个必备配套：
 
-- `data/aliases.json`：人工维护的别名表，来源为 biligame wiki 的「昵称术语」「船名对照」「装备别称」三张表。这是搜索真正的价值所在。
-- `data/pinyin-overrides.json`：**多音字例外表**。自动拼音在舰船名上必错（长门 `chang2` 非 `zhang3`、齐柏林、香格里拉等），逐条人工登记。859 艘里量不大但不可省。
+- `data/manual/aliases.json`：人工维护的别名表，来源为 biligame wiki 的「昵称术语」「船名对照」「装备别称」三张表。这是搜索真正的价值所在。
+- `data/manual/pinyin-overrides.json`：**多音字例外表**。自动拼音在舰船名上必错（长门 `chang2` 非 `zhang3`、齐柏林、香格里拉等），逐条人工登记。859 艘里量不大但不可省。
 
 **MDX 正文搜索**：Orama（具备 CJK tokenizer），内容层阶段加入，索引懒加载，不进首屏。
 
@@ -1346,7 +1352,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # 1. SHA 锁定取数（§3.2 步骤 1–4），SHA 与 OID 索引一起落盘
-      - run: pnpm --filter pipeline fetch --server=CN --tier=A,B --by=oid
+      # 必须写 `run fetch`：`pnpm fetch` 是 pnpm 内建命令（把依赖灌进虚拟存储），
+      # `pnpm --filter pipeline fetch` 会命中内建的那个，一句 pipeline 代码都不跑。
+      # 本地已踩到：输出是 "Importing packages to virtual store"，exit 0。
+      - run: pnpm --filter pipeline run fetch --server=CN --tier=A,B --by=oid
       # 变更判定不能只看上游 SHA / 图片 OID：归一化代码、Zod schema、人工四表、
       # 图片尺寸与编码器版本变了，上游没变也必须重建。
       # check-changes 的指纹 = sha256(上游SHA + 白名单OID + packages/pipeline/src/**
@@ -1645,7 +1654,7 @@ jobs:
 | 1.3 | `tables.ts` 表注册表：**24 组同名互补表的目录解析**（§3.4）+ 分档 + **逐表条目数下限断言**；codeload fetch + SHA 落盘 + OID 变更判定 | `data/raw/<sha>/` |
 | 1.4 | A 档舰船相关表 Zod schema + fixtures 回归 | 校验通过 |
 | 1.5 | `attr-map.ts` 由 `attribute_info_by_type` 生成 + 与 `enemy_data_statistics` 键集交叉断言 | 属性定义落地 |
-| 1.6 | `data/factions.json` 与 `data/rarity.json` 人工表（合并 `word_shipNation_*`） | 阵营与稀有度显示 |
+| 1.6 | `data/manual/factions.json`（29 条，`nationality → wordKey → slug`）与 `data/manual/rarity.json`（两段声明）；显示名与标签构建期从 gametip 读回并逐条比对 | 阵营覆盖 + 稀有度取值域两侧对齐 + 船名占位全解析 |
 | 1.7 | normalize 三层：`ship` / `ship_stage` / `ship_skin` / `ship_retrofit` / `fleet_tech` | `normalized/*.jsonl.gz` |
 | 1.8 | emit JSONL → 建 SQLite | `data/al.sqlite` 可查 |
 | 1.9 | 图片：1 艘船的 icon + 默认立绘 + 1 张换装，**skinId 精确 join** → sharp → LocalAdapter（**仅本地验证，不上线**） | `data/images/` |
@@ -1657,14 +1666,14 @@ jobs:
 
 ### 阶段 2 · 舰船图鉴全量
 
-- 扩至 859 条目 / 3,957 阶段行 / 2,730 皮肤；落实正向枚举过滤
+- 扩至 859 条目 / 3,429 阶段行（860 个 skin_id）/ 2,730 皮肤；落实正向枚举过滤
 - 详情页完整：六维雷达、**1–100 级**属性曲线（含 `attrs_growth_extra`，见 §3.7）、突破表、装备位与效率、**技能名与描述文本**（buff 机制与触发数值不在范围，§8.2）、皮肤画廊、改造分支、舰队科技点、**语音文本**（B 档 `ship_skin_words`）、获取方式（含跳转文案）
 - 隔离清单落地（同 `skin_id` 多船名的处理）
 - `/ship` 全量交互筛选（阵营 / 舰种 / 站位 / 稀有度 / 图鉴分类 / 获取方式 / 排序），URL 可分享，query 变体 canonical
 - ~140 个 SEO 索引页（≥5 条阈值）
 - 联动船标注所属活动与「不可获取」；**META（`handbook_type=3`，59）与科研船（`handbook_type=2`，42）各有独立分类页**；改造是舰船详情页上的分支区块（来自 `trans_*`），**不是图鉴分类维度**（§3.5）
 - **人工抽检 5 艘**（覆盖不同舰种与站位）对照游戏内数值
-- **用户核对 `factions.json` 的 28 个 nationality 中文名**（其中 3/4/6/8/9/11/96 为交叉推断）
+- **用户核对 3 个阵营**：8 / 9 谁是自由鸢尾谁是维希教廷，10 是否即鸢尾教国（其余 25 个值已在数据内钉死，§11 C）
 
 **验收**：859 页正确；5 艘抽检通过；产物文件数 < 18,000；构建 < 20 分钟；无一条数据来自枚举猜测。
 
@@ -1704,7 +1713,7 @@ jobs:
 - `/chapter/[id]`：981 关（主线 135 / 活动 846 两套模板）、材料掉落表、敌方配置（`enemy_data_statistics` 具名字段直接渲染）、出击消耗、周回配置
 - `/item` 物品与设计图 3,030 条
 - `/build` 建造时间表与检索（**不含概率**，见 §8）
-- **`data/drop-overrides/equipment/` 人工覆盖层**：装备本体掉落无法自动获取，按需人工登记高频关卡
+- **`data/manual/drop-overrides/equipment/` 人工覆盖层**：装备本体掉落无法自动获取，按需人工登记高频关卡
 
 **验收**：随机抽 20 关，页面展示的奖励项与 `award_display` ∪ `chapter.awards` 的解析结果**逐条一致**（这是自洽性检查，不是与游戏内掉落一致——数量与概率不可得，§8.2）；展示标签（少量/较少/普通/较多/大量）原样呈现不做数值化；敌人编组与 `dungeon.json` 解析结果一致且无名怪显示描述性标签而非空白；反查双向正确；页面明示「装备本体掉落需人工登记，未登记项标注未知」。
 
@@ -1850,11 +1859,11 @@ Pages 侧另用「回滚到历史部署」作为秒级预案。两者是不同�
 
 | 原设想 | 实测结论 | 处理方式 |
 |---|---|---|
-| **关卡装备本体掉落** | 装备本体走物资箱，`box_data_template` 只有 85 行 `{id, name:"物资箱", effect_id, type}`，**装备随机池在效果脚本里，不在任何结构化数据表** | `/drop` 只提供材料与设计图反查；装备掉落设 `data/drop-overrides/equipment/` 人工覆盖层；页面明示「未登记 = 未知」，不猜 |
+| **关卡装备本体掉落** | 装备本体走物资箱，`box_data_template` 只有 85 行 `{id, name:"物资箱", effect_id, type}`，**装备随机池在效果脚本里，不在任何结构化数据表** | `/drop` 只提供材料与设计图反查；装备掉落设 `data/manual/drop-overrides/equipment/` 人工覆盖层；页面明示「未登记 = 未知」，不猜 |
 | **建造概率查询** | 全部 623 张表里没有建造概率数据。概率是服务端逻辑 | `/build` 只做时间表与舰船检索；概率页**从计划中删除**，除非人工维护 |
 | **精确伤害模拟** | 需串 `weapon_property`(53,585) → `bullet_template`(19,165) → `barrage_template`(26,975) → `aircraft_template`(7,224) ≈ **10.7 万行弹道几何**，且装甲克制 / 命中 / 制空公式在代码不在表 | 只做面板估算 + 明确免责；见阶段 6 |
 | **画师展示** | `illustrator.json` 41 行**只有 `code` 无姓名**；`gametip` 402 个 `word_*` 类目里 `word_illustrator*` = 0 | **不展示画师字段**，不留空占位。若日后从社区获得映射表再补 |
-| **稀有度显示名（N/R/SR/SSR/UR）** | `gametip` 只有 UI 标签 `word_rarity→'稀有度'`，等级值本身是图片渲染，无文本源。**且不能用 `star` 代替**：`star` 是突破阶段（1→6，北卡实证），按它映射会让同一艘船突破后改变稀有度分类；`ship_data_group` 无 `rarity` 字段；`ship_data_by_star` 实测是星级经济表（`destory_item`/`energy_recover_*`/`exchange_price`/`level_restrictions`），也不是稀有度标签 | 人工维护 `data/rarity.json`，**舰船与装备两套**（装备侧有 `rarity` 1–6 + `equip_data_by_quality` 6 档可对齐；舰船侧的权威字段仍**待实测**，见 §12） |
+| **装备稀有度显示名** | 舰船侧有文本源：`ship_data_statistics` 阶段行的 `rarity` 取值恰好 {2,3,4,5,6}，与 `gametip` 的 `index_rare2`…`index_rare6`（普通 / 稀有 / 精锐 / 超稀有 / 海上传奇）两侧一一对上，**舰船稀有度不是缺口**。**且不能用 `star` 代替**：856 组阶段行里 `star` 四行互不相同而 `rarity` 恒定；`ship_data_by_star` 是星级经济表；`ship_data_group` 无 `rarity` 字段。装备侧才是真缺口：`equip_data_statistics` 10,365 行中 1,524 行带 `rarity`（{1..6}），而 `equip_data_by_quality` 六档**没有任何显示名字段**，CN 数据里查不到装备稀有度的中文词 | 舰船稀有度构建期由 `gametip` 生成（`data/manual/rarity.json` 只声明取值域与读法，不抄文本）；装备侧按 `labelPolicy: numeric` 只显示档位数字与配色，`/data-quality` 公开记这一条 |
 | **日常委托收益计算** | `task_data_template`(7,948) 是任务表不是委托表；`expedition` 在本套数据里指**出击战斗节点**不是委托。真实委托表未定位 | 该功能暂不排期；定位到表后再评估（§11 F） |
 | **舰船掉落来源（打捞得船）** | `award_display` 只指向 item，不含舰船；舰船出处信息来自 `description` 文本与建造表，粒度较粗 | 用 `description` 提供「推荐关卡」提示，不承诺精确打捞概率 |
 | **敌人名称** | 编组能解析（977/981 关），但**名字取不到**：`enemy_data_statistics` 13,568 行只有 1,962 行有 `name`；关卡实际用到的 11,292 个怪里**仅 679 个有名（6.0%）**。`base` 字段不回连 `ship_data_statistics`（交集 0），也不回连 `ship_skin_template`（交集 0），无法借舰船名恢复 | 有名则显示名；无名一律渲染成描述性标签「{`enemy_data_by_type.type_name`} · Tier.N · Lv.{level}」，**不编造名字**。已命名的 679 个恰是 META / 塞壬 Boss，正是玩家需要认出的那批 |
@@ -1866,19 +1875,19 @@ Pages 侧另用「回滚到历史部署」作为秒级预案。两者是不同�
 
 | 文件 | 内容 | 规模 | 来源 |
 |---|---|---|---|
-| `data/factions.json` | nationality → slug → 中文名 → 配色 → EN 图标号 | 28 条 | `word_shipNation_*` + 舰船反查 + 用户核对 |
-| `data/rarity.json` | **舰船稀有度**与**装备稀有度**两张独立映射，各含显示名 + 配色 | 舰船 ? 条 / 装备 6 条 | 游戏内显示 |
-| `data/aliases.json` | 舰船/装备/技能 别名与昵称 | 数百条 | biligame wiki 三张表 |
-| `data/pinyin-overrides.json` | 多音字例外 | 数十条 | 人工 |
+| `data/manual/factions.json` | nationality → `wordKey` → slug，每条带 `source` 与 `evidence`；中文名不落地（构建期从 gametip 读回并比对）；EN 图标号在图片层接线时（§6.6 / 阶段 3B）才加 | 29 条（28 实出 + 10 无船） | `memory_storyline` 事件名与 `ship_data_group.description` 共现钉死，8/9/10 待用户核对（§11 C） |
+| `data/manual/rarity.json` | 声明两段：舰船 2–6（标签 `gametip:index_rare{value}`，取值域与文本两侧互校）、装备 1–6（`labelPolicy: numeric`，CN 无文本源） | 两段 | 实测字段（§11 A / §8.2） |
+| `data/manual/aliases.json` | 舰船/装备/技能 别名与昵称 | 数百条 | biligame wiki 三张表 |
+| `data/manual/pinyin-overrides.json` | 多音字例外 | 数十条 | 人工 |
 
-可选：`data/drop-overrides/equipment/`、`data/image-overrides/cn/`——按需增量，不要求一次做完。
+可选：`data/manual/drop-overrides/equipment/`、`data/manual/image-overrides/cn/`——按需增量，不要求一次做完。
 
 ### 8.4 规模汇总（用于评估）
 
 | 维度 | 数量 |
 |---|---|
 | 静态 HTML 页 | 859 舰船 + 909 装备 + 981 关卡 + 140 索引页 + 3,030 技能(可选) + 其它 ≈ **2,900–5,900** |
-| SQLite 主要表 | ship 859 · ship_stage 3,957 · ship_skin 2,730 · equipment 909 · equip_level_row 8,261（base 继承子行）· equip_level_link 8,261 · skill 3,030 · chapter 981 · expedition 15,515 · stage_enemy 9,288 · drop 64,963 · item 3,030 · research_project 685（technology_data_template，科研项目目录）· fleet_tech 节点（fleet_tech_*）· **research_ship 42**（ship_data_blueprint，科研船）· retrofit_node 1,217（transform_data_template）· retrofit_branch 78–106（`trans_type`/`trans_skin`/`ship_data_trans`）· world 644 · voice_line 2,485 · enemy 13,568 |
+| SQLite 主要表 | ship 859 · ship_stage 3,429（阶段行）+ ship_row_other 528（非阶段行，只登记不渲染） · ship_skin 2,730 · equipment 909 · equip_level_row 8,261（base 继承子行）· equip_level_link 8,261 · skill 3,030 · chapter 981 · expedition 15,515 · stage_enemy 9,288 · drop 64,963 · item 3,030 · research_project 685（technology_data_template，科研项目目录）· fleet_tech 节点（fleet_tech_*）· **research_ship 42**（ship_data_blueprint，科研船）· retrofit_node 1,217（transform_data_template）· retrofit_branch 78–106（`trans_type`/`trans_skin`/`ship_data_trans`）· world 644 · voice_line 2,485 · enemy 13,568 |
 | R2 图片 | 估算 **2.66GB** / 10GB（补入 shipyard / qicon / chibi / banner 四类后，见 §3.8） |
 | 取数体积 | A 31MB · B 63MB · C 56MB · D 50MB + `GameCfg/dungeon.json` 80MB（只用一次，产出 0.59MB，不入库） |
 | normalized 入库 | A 约 2.5MB · B 约 4MB · stage_enemy 约 0.6MB（gzip） |
@@ -1955,7 +1964,7 @@ README 里的非商业声明、作者署名、DMCA 邮箱，都不等于权利�
 | 上游改数据结构 | 高 | 构建失败 | 正向权威表 + Zod 严格校验 + 自动开 issue + 线上保持旧版；固定 SHA 可回滚 |
 | **美术再分发无授权** | **已确认为事实**（两个上游 `license: null`） | 上线即构成未经授权的复制与信网传；被要求下架时图片链路整体崩塌 | **上线前硬门槛**，不是风险备注。§8.5 三选一，默认走方案 B（不托管图片）；已写的图片管道保留，授权到手后切换不返工 |
 | **把数据调查结论当工程结论** | 中（本文档自身的失效模式） | 按 E-unverified 的数字排期或验收，首次真实构建即推翻 | 文档头部标 D-verified / E-unverified / 待实测三级；§7 阶段 1.12 强制一次冷构建并记录 baseline，之后所有产物数与时长以实测值替换推算值 |
-| **推断当权威** | 已存在 6 处（`nationality` 3/4/6/8/9/11） | 阵营名错标，与「不猜枚举」原则冲突 | `factions.json` 每条带 `source: authoritative\|inferred`；`/about` 与 `/data-quality` 公开列出 inferred 项；用户核对前状态为待审（§11 C） |
+| **推断当权威** | 现存 4 处（`nationality` 8/9/10 与 98），其余 25 处已由数据文本或舰船身份钉死 | 阵营名错标，与「不猜枚举」原则冲突 | `factions.json` 每条带 `source: data-text\|ship-identity\|inferred\|structural` 与 `evidence`；`/data-quality` 按档公开；显示名构建期与 gametip 逐条比对，改名即中止（§11 C） |
 | 上游改枚举语义 | 中 | 分类页错乱 | `handbook_type` / `type` / `nationality` 出现未知值即中止开 issue；`weekly-verify` 独立发现漂移 |
 | 取数被网络与限额中断 | **已确认会发生** | 同步失败 | 主路径 codeload tarball（不限额）；API 兜底时校验响应体大小与可解析性；多后端可切换；失败不覆盖 normalized |
 | 误取空壳同名表 | **已确认 24 处，且规律严格互补** | 拿到 `[]`/`{}` 当有效数据 → 站点构建成功但满屏空白 | `tables.ts` 注册表强制目录前缀 + 每张表最小条目数断言（§3.4 全表已列） |
@@ -2002,9 +2011,20 @@ README 里的非商业声明、作者署名、DMCA 邮箱，都不等于权利�
 
 ### A. 舰船与皮肤模型：三层，主键是 `group_type`
 
-`ship_data_group.group_type`(859) → `ship_skin_template.id`(2,730) → `ship_data_statistics.id`(3,957，是突破阶段行)。`skin_id` 指向皮肤不是基船。每 `skin_id` 对应行数以 4 为众数，对应突破 0/1/2/3，`star` 随之递增。已用北卡罗来纳等实例验证。
+`ship_data_group.group_type`(859) → `ship_skin_template.id`(2,730) → `ship_data_statistics.id`(3,957)。`skin_id` 指向皮肤不是基船。
 
-`handbook_type` 是游戏自己的图鉴分类：0 常规 667 / 1 联动 91 / 2 改造 42 / 3 META 59。
+`ship_data_statistics` 内部是**两套行混在一张表里**，切法只能用字段关系：
+
+```
+阶段行  id - skin_id ∈ 1..4   3,429 行 / 860 个 skin_id（856 组正好 4 行，3 组 1 行，1 组 2 行）
+                              rarity 在每个 skin_id 内唯一，取值域恰好 {2,3,4,5,6}
+非阶段行 其余                  528 行   attrs 全 1 的展示单位、id 自指的 NPC 行
+                              rarity=18 的三行全在这一侧，不是新的稀有度档
+```
+
+不拿 `id >= 900000` 这类阈值切：阈值是观测出来的巧合，`id - skin_id` 才是定义。按阶段行聚合后 `star` 随阶段递增而 `rarity` 恒定，这也是「禁止用 star 推稀有度」的实证。已用北卡罗来纳等实例验证。
+
+`handbook_type` 是游戏自己的图鉴分类：0 常规 667 / 1 联动 91 / 2 科研船 42 / 3 META 59。
 
 ### B. 352 个孤儿 `ship_group`：确认排除出图鉴
 
@@ -2019,33 +2039,68 @@ README 里的非商业声明、作者署名、DMCA 邮箱，都不等于权利�
 
 处理：`ship_data_group` 的 859 条是图鉴唯一白名单；孤儿皮肤登记进 `orphan_skin` 表，只为让图片管道解释其存在，不生成页面、不进搜索。
 
-### C. `nationality` → 阵营名：来自 `gametip` 的 `word_shipNation_*` + 人工核对
+### C. `nationality` → 阵营名：靠 `memory_storyline` 的事件名与活动描述共现钉死
 
-`CN/sharecfgdata/gametip.json`（1.01MB / 7,449 键 / 402 个 `word_*` 类目）中 `word_shipNation_*` 32 条给全阵营与联动名（`baiYing` 白鹰 · `huangJia` 皇家 · `chongYing` 重樱 · `tieXue` 铁血 · `dongHuang` 东煌 · `beiLian` 北方联合 · `ziyou` 自由鸢尾 · `weixi` 维希教廷 · `saDing` 撒丁帝国 · `yuanwei` 鸢尾教国 · `yujinwangguo` 郁金王国 · `mot` 飓风 · `meta_index` META（`meta` 显示为 `???`）· `np` 海王星 · `holo` hololive · `imas` 偶像大师 · `senran` 闪乱神乐 · `ssss` SSSS · `dal` Date A Live · `doa` 维纳斯假期 · `um` 传颂之物 · `tolove` To LOVE-Ru · `ryza`/`yumia` 炼金工房 · `brs` BRS · `ai` KizunaAI · `bili` 哔哩哔哩 · `link` 联动 · `other` 其他 · `all` 全阵营）。
+`CN/sharecfgdata/gametip.json`（7,449 键 / 402 个 `word_*` 类目）中 `word_shipNation_*` 32 条给全阵营与联动名（`baiYing` 白鹰 · `huangJia` 皇家 · `chongYing` 重樱 · `tieXue` 铁血 · `dongHuang` 东煌 · `beiLian` 北方联合 · `ziyou` 自由鸢尾 · `weixi` 维希教廷 · `saDing` 撒丁帝国 · `yuanwei` 鸢尾教国 · `yujinwangguo` 郁金王国 · `mot` 飓风 · `meta_index` META（`meta` 显示为 `???`）· `np` 海王星 · `holo` hololive · `imas` 偶像大师 · `senran` 闪乱神乐 · `ssss` SSSS · `dal` Date A Live · `doa` 维纳斯假期 · `um` 传颂之物 · `tolove` To LOVE-Ru · `ryza` Atelier Ryza · `yumia` Atelier Yumia · `brs` BLACK★ROCK SHOOTER · `ai` KizunaAI · `bili` 哔哩哔哩 · `danmachi` danmachi · `link` 联动 · `other` 其他 · `all` 全阵营）。**这些条目只有词键与文本，不带数字。**
 
-这些条目**只有 slug 与 tip，不带数字 id**，因此数字 `nationality` → slug 靠反查钉死：
+数据里出现数字阵营的一共三处，彼此之间没有任何 `nationality → 词键` 映射：
 
-| `nationality` | 阵营 | 依据 |
+| 表 | 字段 | 实测取值 |
 |---|---|---|
-| 1 | 白鹰 | 企业、圣路易斯、奇尔沙治 反查 |
-| 2 | 皇家 | 胡德、贝尔法斯特、胜利 反查 |
-| 3 | 重樱 | `lover_nation` nation 3 的 `letter="jp"`；条目 165 为最多 |
-| 4 | 铁血 | 排除法 + 标准顺序 —— **待审（T-1）** |
-| 5 | 东煌 | 逸仙反查 + `lover_nation` nation 5 `letter="cn"` |
-| 7 | 北方联合 | 莫斯科反查 |
-| 6 / 8 / 9 / 11 | 自由鸢尾 / 维希教廷 / 撒丁帝国 / 虹彩 | 交叉推断 —— **待审（T-2）** |
-| 96 | 郁金王国（风帆） | 16 条 group 的 `type` 全为 22/23/24，船名为历史帆船：皇家财富号、金鹿号、玛丽·西莱斯特号、安妮女王复仇号 |
-| 97 | META | `handbook_type=3` 的 59 条全为 97；`lover_nation` nation 97 `letter="meta"` |
-| 98 | 布里系 | 泛用型布里等 3 条，突破素材船 |
-| 101–115 | 各联动 | `handbook_type=1` 的 91 条全落在此区间 |
+| `ship_data_group`（859） | `nationality` | **恰好 28 个：1–9、11、96、97、98、101–115**（没有 10；不是「1–11」连续段） |
+| `lover_nation`（16 键，ShareCfg） | `nation` | 0–11、96、97、98 + `all`；带 `letter`，取值只有 `en`/`jp`/`cn`/`meta` —— 是书信文体的语言码，不是国别码 |
+| `memory_storyline`（94 条，ShareCfg） | `shipnation[]` | {1, 2, 3, 4, 5, 6, 7, **10**, 11, 97}；8 与 9 从不出现在任何事件里 |
 
-落地为 `data/factions.json`，出现表中没有的值即构建失败。
+可用的正向判据是**文本共现**：`memory_storyline` 带中文事件名，`ship_data_group.description` 带每艘船的出处活动名。事件名里出现某个阵营名时，该事件的 `shipnation` 与这批船的 `nationality` 就把数字钉住。逐条钉出的 29 条（28 个实出值 + 10 只在剧情侧出场）：
 
-**但必须诚实标注：6 个值（3 / 4 / 6 / 8 / 9 / 11）是推断，不是权威读出的。** 这与核心原则 1「正向建模，不猜枚举」存在一处尚未闭合的缺口——`gametip` 给的是 slug→中文名，`ship_data_group` 给的是数字 `nationality`，两者之间**没有一张表带 `nationality → slug` 的映射**，所以中间这一跳只能靠样本反查。处理：
+| `nationality` | 阵营 | 船数 | `source` | 依据 |
+|---|---|---|---|---|
+| 1 | 白鹰 | 159 | data-text | 事件 30「迷雾之下」、40「渐入迷踪」文本含「白鹰」，`shipnation` 恰为 `[1]` |
+| 2 | 皇家 | 120 | data-text | 50「意外的旅途」`shipnation=[2]` 且文本含「皇家」；39「皇家号令」`[2,10,1]` |
+| 3 | 重樱 | 165 | data-text | 89「重樱的邀约」`shipnation` 恰为 `[3]`，bgm `story-newsakura`；另 26/29/41 三事件互证 |
+| 4 | 铁血 | 91 | data-text | 9「铁血、音符与誓言·上」`shipnation` 恰为 `[4]`；13「…·下」`[4,2]` |
+| 5 | 东煌 | 26 | ship-identity | `lover_nation` 5 `letter=cn`；船名全是中国近代舰（鞍山/逸仙/宁海/镇海/寰昌） |
+| 6 | 撒丁帝国 | 37 | data-text | 8「神圣的悲喜剧」/42「复兴的赞美诗」/63「绿洲往事」`shipnation` 恰为 `[6]`，bgm `battle-boss-italy`、`story-italy`；52「撒丁的邀约」`shipnation` 首位是 6，bgm `story-roma-outside` |
+| 7 | 北方联合 | 38 | ship-identity | 36「破晓冰华」/47「黎明之暗」/62「极地风暴」`shipnation` 恰为 `[7]`，bgm `bgm-cccp*`；船名为苏联舰（阿芙乐尔/基洛夫/塔什干/苏维埃罗西亚） |
+| 8 | 自由鸢尾 | 27 | **inferred** | 见下 |
+| 9 | 维希教廷 | 24 | **inferred** | 见下 |
+| 10 | 鸢尾教国 | 0 | **inferred** | `lover_nation` 与 `memory_storyline` 都有 10（64「奏响鸢尾之歌」`shipnation` 恰为 `[10]`，bgm `theme-irisangel`，25 处引用），但图鉴无一条船：这是只在剧情侧存在的战前鸢尾 |
+| 11 | 郁金王国 | 3 | data-text | 三条船（七省/埃佛森/金狮）`description` 为「限时活动：扬起郁金之旗」与科研开发；86「扬起郁金之旗」`shipnation` 含 11，bgm `story-tulipa` |
+| 96 | 飓风 | 16 | data-text | 16 条船 `description` 全为「限时活动：飓风与青春之泉／沉眠之海／自由群岛」；`gametip` 的 `battle_text_haidao_1` 原文「侦测到非「飓风」舰船」；`type` 全为 22/23/24（风帆） |
+| 97 | META | 59 | data-text | `handbook_type=3` 的 59 条全落 97；`lover_nation` 97 `letter=meta`；50 条 `description` 含「META」 |
+| 98 | 其他 | 3 | structural | 泛用型布里 / 试作型布里MKII / 特装型布里MKIII 三条素材船，`description` 只有勋章商店、军需商店、每周任务、原型商店；32 个词键里能容纳它的只剩 `other`。页面按「其他」分组，不宣称这是游戏内阵营名 |
+| 101 | 海王星 | 8 | ship-identity | 涅普顿/诺瓦露/布兰/贝露 + 四色之心 |
+| 102 | 哔哩哔哩 | 2 | ship-identity | 船名即「22」「33」（站娘 22 娘 / 33 娘） |
+| 103 | 传颂之物 | 6 | ship-identity | 久远/猫音/露露缇耶/乌璐露/萨拉娜/芙米露露 |
+| 104 | KizunaAI | 4 | ship-identity | 绊爱 + 三个形态 |
+| 105 | hololive | 7 | ship-identity | 白上吹雪/时乃空/湊阿库娅/夏色祭/百鬼绫目/紫咲诗音/大神澪 |
+| 106 | 维纳斯假期 | 15 | ship-identity | 玛莉萝丝/穗香/霞/海咲/凪咲/女天狗… |
+| 107 | 偶像大师 | 7 | ship-identity | 天海春香/如月千早/水濑伊织/秋月律子/双海姐妹 |
+| 108 | SSSS | 9 | ship-identity | 宝多六花/新条茜/南梦芽/飞鸟川千濑… |
+| 109 | Atelier Ryza | 6 | ship-identity | 莱莎琳·斯托特 + 同伴 |
+| 110 | 闪乱神乐 | 7 | ship-identity | 飞鸟/斑鸠/焰/雪泉/紫… |
+| 111 | To LOVE-Ru | 6 | ship-identity | 菈菈/娜娜/梦梦·贝莉雅·戴比路克、金色暗影… |
+| 112 | BLACK★ROCK SHOOTER | 2 | ship-identity | BLACK★ROCK SHOOTER / DEAD MASTER |
+| 113 | Atelier Yumia | 4 | ship-identity | 优米雅·利斯菲尔德 + 同伴 |
+| 114 | danmachi | 2 | ship-identity | 赫斯缇雅 / 琉·璃昂 |
+| 115 | Date A Live | 6 | ship-identity | 夜刀神十香/鸢一折纸/五河琴里/四糸乃/时崎狂三/八舞 |
+| | | **859** | | 101–115 恰好 15 个值 ↔ `gametip` 恰好 15 个联动词键，双射无剩余 |
 
-- `data/factions.json` 每条带 `source: "authoritative" | "inferred"` 与 `confidence`，构建期不区分渲染，但 **`/about` 与 `/data-quality` 页必须列出 `inferred` 的 6 项**，让读者知道哪几个阵营名有待核对。
-- 这 6 项在用户核对（§12 第 7 项）完成前，状态是 **待审**，不得对外称「权威表」。核对结果直接改进 `factions.json` 并把 `source` 升为 `authoritative`。
-- 若核对发现某个推断是错的，影响面是阵营筛选页与舰船页阵营标签，**不会**导致数据丢失（数字键本身是对的），这是该缺口可控的原因。
+`source` 四档的定义（构建期不区分渲染，`/data-quality` 按档公开）：
+
+- **data-text** —— 数字与阵营名在数据文本里同现，链在库内闭合：8 条（1/2/3/4/6/11/96/97）。
+- **ship-identity** —— 链在库内断，靠舰船名的史实归属或 IP 身份判定，可复核但不是读出来的：17 条（5/7 + 15 个联动）。
+- **inferred** —— 一组互斥候选之间还需要一次人为分配：3 条（8/9/10）。
+- **structural** —— 排除法归到剩余类目：1 条（98）。
+
+**8 / 9 / 10 是这块唯一没闭合的缺口。** 三者的船名全是法国系，而 `shipnation` 里只有 10、从不出现 8 与 9；分 8 与 9 只能靠「哪艘在 1940 之后站在维希那边」这类史实：本表把 黎塞留/贝亚恩/凯旋/鲁莽/倔强/絮库夫/福尔班/埃米尔·贝尔汀 归 8=自由鸢尾，把 敦刻尔克/斯特拉斯堡/让·巴尔/阿尔及利亚/拉·加利索尼埃/霞飞/克莱蒙梭 归 9=维希教廷，10 则是无船可造的战前鸢尾教国。这三条在用户核对（§12 第 7 项）之前状态是**待核**，不得对外称权威。判定反了的影响面是两张阵营筛选页与 51 艘船的标签，数字键本身不受影响 —— 这是缺口可控的原因。
+
+落地为 `data/manual/factions.json`，29 条，每条只登记 `nationality / wordKey / slug / name / source / evidence`：
+
+- **`name` 不用于渲染。** 页面文本构建期从 `gametip` 的 `word_shipNation_{wordKey}` 实时读出，`assertNamesAgreeWithGametip` 把表里的 `name` 逐条比对上游文本，不一致即中止 —— 抄写会随上游改名分叉，比对不会。
+- `assertCovers`：`ship_data_group` 出现表里没有的数字即构建失败，不允许静默显示未知阵营。反向不强制（10 允许 0 条船）。
+- `slug` 是站点自己的 URL 身份（`eagle-union` / `tulip-kingdom` / `hololive`），与 `nationality` 数字解耦：数字会随上游变，URL 不能。
+
 
 ### D. 敌方单位属性在 `enemy_data_*`；每关编组必须靠 `GameCfg/dungeon.json`
 
@@ -2079,7 +2134,7 @@ enemy_data_by_type      26 键（驱逐…，含舰船侧不存在的 14 鱼雷�
 
 收敛后 909 条**每条都有 `icon`**（实测 0 缺失，558 族）、rarity 六档齐备，可作图片连接键。重名是不同稀有度/科技层的独立装备，各占一页。
 
-**稀有度不能用 `star` 推**：`ship_data_statistics.star` 随突破从 1 递增到 6（北卡 105121→105124 即 star 3→6），按 star 映射 N/R/SR/SSR/UR 会让同一艘船在突破后改变稀有度分类。舰船侧的稀有度来源需单独确证（`ship_data_group` 无 rarity 字段；`ship_data_by_star` 实测是星级经济表：`destory_item` / `energy_recover_*` / `exchange_price` / `level_restrictions`，也不是稀有度标签）——见 §8.3 与待实测项。装备侧有 `rarity`(1–6) + `equip_data_by_quality`(6 档) 可用，两者**不能共用一张映射表**。
+**稀有度不能用 `star` 推，也不能两侧共用一张映射表。** 舰船侧的字段是 `ship_data_statistics.rarity`，且只在阶段行上成立：856 组四行阶段行里 `star` 从 1 递增到 6 而 `rarity` 恒定（北卡 105121→105124 即 star 3→6），按 star 映射会让同一艘船突破后换档。取值恰好 {2,3,4,5,6}，与 `gametip` 的 `index_rare2`…`index_rare6`（普通/稀有/精锐/超稀有/海上传奇）一一对上，`index_rare1` 不存在——两侧域相同才是这条链可用的证据。装备侧 `rarity` 是 1–6，同名不同义（`equip_data_by_quality` 只有经济数值没有显示名），必须独立成段。
 
 `weapon_name`(2,380 条，仅 170 有名) 属 5xxxx 武器体系，**不是装备名来源**，只作武器名补充。
 
@@ -2093,15 +2148,20 @@ enemy_data_by_type      26 键（驱逐…，含舰船侧不存在的 14 鱼雷�
 
 处理：委托收益工具**暂不排期**，在阶段 7 定位到表后再评估可行性。
 
-### I. 三处「表名骗人」的语义陷阱（本轮定性，均属 D-verified）
+### I. 八处「表名骗人」的语义陷阱（均属 D-verified）
 
-共同规律：**表名与直觉语义不一致，只有读进内容才能发现**。这三处都是靠名字推断会必然踩空的，所以单列一条并写进验收。
+共同规律：**表名与直觉语义不一致，只有读进内容才能发现**。这几处靠名字推断会必然踩空，所以单列一条并写进验收。
 
 | 表 | 名字暗示 | 实测语义 | 判据 |
 |---|---|---|---|
 | `technology_data_template` | 舰队科技树 | **科研项目目录** | 项目 1 = `C-153-MI` / `time=21600` 秒；项目 11 描述原文「该**科研项目**致力于通过实战的手段，收集各种实验数据…」；`type` 仅 {1:456, 2:229} 两类项目规模 |
 | `equip_data_statistics` | 一行一装备 | **族行与强化等级行混排，靠 `base` 继承** | 8,841 行带 `base`，其中 8,261 行无自有 name/type/rarity/icon；`stats[501]` 只有 `value_1='16' value_2=30`，其余全空，父行 500 才是「小海狸中队队徽」 |
 | `ship_data_by_star` | 星级→稀有度标签 | **星级经济参数表** | 字段是 `destory_item` / `energy_recover_food_ratio` / `energy_recover_time_ratio` / `exchange_price` / `level_restrictions`，无任何显示名 |
+| `ship_data_statistics` | 一行一（船 × 阶段） | **两套行混排** | 3,429 行阶段行（`id - skin_id ∈ 1..4`）+ 528 行非阶段行；不切分就有 11 个 `skin_id` 读出两个 `rarity`（§11 A） |
+| `name_code` | 船名码表 | **是船名占位符的唯一解，且自带两个诱人道字段** | 439 条；`ship_skin_template` 的 1,213 条规范名里 362 条是 `{namecode:N}`；而本表 `nation` 字段 437/439 恒为 0、`type` 恒为 1，看着像阵营/舰种其实全是死值 |
+| `ship_data_by_type` | 舰种→唯一名 | **21 个舰种只有 18 个不同显示名** | `type_name`：导驱 = {20,21}、风帆 = {22,23,24}；数字键也不连续（1–13、17–24，14/15/16 是敌方专用）。按名字做 slug 会撞页 |
+| `equip_data_by_quality` | 装备品质名 | **只有经济数值，没有任何显示名** | 6 档字段仅 `equip_quality` / `gear_score` / `gear_score_addition` / `destory_resource_ratio`；装备稀有度的中文词在 CN 数据里不存在 |
+| `memory_storyline` | 剧情回忆 | **唯一带数字阵营且有中文事件名的表** | `shipnation[]` 只出现 {1,2,3,4,5,6,7,10,11,97}——**8 与 9 从不出现**，所以法系三阵营的分配只能在这里失手；`letter`/`bgm` 键（`bgm-cccp`、`story-italy`、`story-tulipa`）是可用的旁证 |
 
 连带的一条：**改造不是一级分类**。`ship_data_group.handbook_type=2` 是科研船（42 条与 `ship_data_blueprint` 双射），改造在 `trans_type`/`trans_skin`/`trans_skill`/`trans_radar_chart` + `ship_data_trans`，且与 `handbook_type=2` 交集为 0。改造的**节点条件与成本**又不在这些表里，只在 `transform_data_template`（1,217 节点）。一条链上三个层次，混用任意一层去做另一层的事都会出错。
 
@@ -2109,7 +2169,7 @@ enemy_data_by_type      26 键（驱逐…，含舰船侧不存在的 14 鱼雷�
 
 ### G. 无数据源的能力（已在 §8.2 定案）
 
-建造概率（服务端逻辑）、装备本体掉落池（`box_data_template` 只有 `effect_id` 指向脚本）、画师姓名（`illustrator` 只有 code，`gametip` 无对应类目）、稀有度显示名（游戏内为图片渲染）、弹道与命中的精确解算（10.7 万行几何数据 + 代码内公式）。
+建造概率（服务端逻辑）、装备本体掉落池（`box_data_template` 只有 `effect_id` 指向脚本）、画师姓名（`illustrator` 只有 code，`gametip` 无对应类目）、**装备**稀有度显示名（`equip_data_by_quality` 六档无文本字段；舰船侧有源，见 §11 A）、弹道与命中的精确解算（10.7 万行几何数据 + 代码内公式）。
 
 ---
 
@@ -2123,11 +2183,11 @@ enemy_data_by_type      26 键（驱逐…，含舰船侧不存在的 14 鱼雷�
 | 4 | 站名与 slogan（`<title>`、OG 图、页脚） | 阶段 1（可先用占位） |
 | 5 | 版权与免责措辞确认 | 阶段 1（可由 Agent 先拟稿） |
 | 6 | **人工抽检 5 艘舰船**（覆盖不同舰种与站位） | 阶段 2 |
-| 7 | **核对 `data/factions.json` 的 28 个 nationality 中文名**（3/4/6/8/9/11/96 为推断） | 阶段 2 |
-| 8 | `data/rarity.json` 稀有度显示与配色确认。**舰船与装备两套**，不可用 `star` 推（star 是突破阶段） | 阶段 2 |
-| 8b | **待实测（Agent 负责，不需用户提供）**：舰船侧稀有度的权威字段尚未定位——`ship_data_group` 无 `rarity`，`ship_data_by_star` 实测是星级经济表。需在 `ship_data_template` / `ship_data_statistics` 全字段里确证，若确实无源则退化为人工 859 条映射并记入 §8.2 | 阶段 1 |
-| 9 | `data/aliases.json` 与 `pinyin-overrides.json` 首批整理 | 阶段 3 |
-| 10 | CN 立绘文件（可选，放入 `data/image-overrides/cn/`） | 任意 |
+| 7 | **核对 3 个阵营**：8 是自由鸢尾还是维希教廷、9 反之、10 是否即鸢尾教国（11 郁金王国 / 96 飓风 / 6 撒丁帝国已由事件名与活动描述在数据内钉死，不再需要核对） | 阶段 2 |
+| 8 | `data/manual/rarity.json` 稀有度显示与配色确认。**舰船与装备两套**，不可用 `star` 推（star 是突破阶段） | 阶段 2 |
+| 8b | ~~舰船侧稀有度字段待定位~~ **已确证**：字段是 `ship_data_statistics.rarity`，只在阶段行（`id - skin_id ∈ 1..4`）上成立，取值恰好 {2,3,4,5,6}，与 `gametip` 的 `index_rare2`…`index_rare6` 两侧一一对上（§11 A）。剩下的不是缺口而是数据本身没有：装备侧 1–6 档无中文词源，按数字渲染 | 已关闭 |
+| 9 | `data/manual/aliases.json` 与 `pinyin-overrides.json` 首批整理 | 阶段 3 |
+| 10 | CN 立绘文件（可选，放入 `data/manual/image-overrides/cn/`） | 任意 |
 | 10b | 装备图标补图（可选，98 条维希/自由鸢尾舰炮，EN 侧无对应；先走占位图不阻断） | 阶段 3 之后任意 |
 | 11 | 高频关卡的装备掉落人工登记（可选，按需） | 阶段 4 |
 | 12 | 攻略文章署名 | 阶段 8 |
@@ -2257,7 +2317,7 @@ enemy_data_by_type      26 键（驱逐…，含舰船侧不存在的 14 鱼雷�
 | 单个皮肤目录内容 | 6 个文件：`painting.png` ~492KB · `shipyard.png` ~80KB · `icon.png` ~21KB · `chibi.png` ~26KB · `qicon.png` ~18KB · `banner.png` ~31KB |
 | **`painting` 字段陷阱** | `ship_skin_list.json` 的 `painting` 是 `https://raw.githubusercontent.com/...` 完整 URL，该域名在开发环境 DNS 阻断，必须自己拼路径 |
 | 覆盖 | EN 894 组 / 2,613 皮肤 vs CN 859 组 / 2,730 皮肤，约 117 张缺口 |
-| 阵营图标编号 | EN 键 0–24（25 个），CN `nationality` 1–11 / 96–115（28 个），**编号体系不同**，须经 `factions.json` 映射 |
+| 阵营图标编号 | EN 键 0–24（25 个），CN `nationality` 是 1–9、11、96、97、98、101–115 共 28 个离散值（无 10），**编号体系不同且区间不连续**，须经 `factions.json` 映射 |
 | 装备图标覆盖（**已实测**） | CN 909 装备族代表行 → 558 icon 族；EN `equipment_icon.json` 936 键。**族命中 499/558 = 89.4%，条目命中 811/909 = 89.2%**；缺 59 族 / 98 条，全部落在 `500xx–562xx` 与 `85240`（Mle1924/1929/1930/1931/B-54 一系维希·自由鸢尾舰炮）。缺口走占位图，不阻断构建 |
 | `Pelom777/AzurLaneTools` | 排除：Vue 源码项目（100 文件），7GB 全是 git 历史 |
 | `LmeSzinc/AzurLaneUncensored` | 反和谐补丁（397MB），反证 CN 立绘存在和谐差异 |

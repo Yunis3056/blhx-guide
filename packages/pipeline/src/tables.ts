@@ -60,8 +60,10 @@ export const TABLES = {
     name: 'ship_data_statistics',
     top: 'dict',
     keyStrategy: 'numeric',
-    semantic: '(船 × 突破阶段) 行，不是每船一行；skin_id 指向默认皮肤',
-    evidence: '3,957 行；attrs / attrs_growth / attrs_growth_extra 三个数组全部定长 12',
+    semantic:
+      '★ 混合两套行：3,429 行是 (船 × 突破阶段) 行，判据 id - skin_id ∈ 1..4；其余 528 行是 attrs 全 1 的展示单位与 id 自指的非舰船行。按 skin_id 聚合时必须先切阶段行，否则同一艘船会读出两个 rarity（全表 11 例）',
+    evidence:
+      '3,957 行 = 阶段行 3,429（860 个 skin_id，856 组正好 4 行，rarity 域恰好 {2,3,4,5,6}，0 例冲突）+ 非阶段行 528（rarity=18 的三行全在这侧）；attrs / attrs_growth / attrs_growth_extra 三个数组全部定长 12',
     minRows: 3200,
     measured: true,
     tier: 'A',
@@ -244,6 +246,44 @@ export const TABLES = {
     semantic: '★ 装备转换 / 研发图（有分叉与汇合），不是普通强化等级链（那是 equip_data_template.next/prev）',
     evidence: '282 键 = 281 条 + all:[4340,11060,…]；{id, upgrade_from, target_id, material_consume, coin_consume}',
     minRows: 240,
+    measured: true,
+    tier: 'A',
+  }),
+
+  nameCode: T({
+    dir: 'ShareCfg',
+    name: 'name_code',
+    top: 'dict',
+    keyStrategy: 'numeric',
+    semantic:
+      '★ 船名占位符解析表。ship_skin_template.name 里的 {namecode:N} 必须在这里展开，否则图鉴近半标题是字面量花括号。nation / type 两个字段恒定（439 条里 437 条 nation=0），不可当阵营用',
+    evidence:
+      '439 条数字键，无 all 哨兵；1,213 条规范名（skin_type=-1）中 361 条是占位；全表实际引用 276 个 namecode，逐个命中；带后缀形态如 {namecode:197}(μ兵装)、{namecode:93}·META，须逐处替换而非整串查表',
+    minRows: 400,
+    measured: true,
+    tier: 'A',
+  }),
+  memoryStoryline: T({
+    dir: 'ShareCfg',
+    name: 'memory_storyline',
+    top: 'dict',
+    keyStrategy: 'numeric-excluding-all',
+    semantic:
+      '★ 活动 / 剧情线一览，带 shipnation 数字阵营数组与中文事件名 —— 这是 CN 数据里第二处出现数字阵营的地方，也是把 nationality 钉成阵营名的主要证据源（如 89「重樱的邀约」shipnation=[3]）',
+    evidence: '95 条 + all 哨兵；字段 {id,name,description,bgm,shipnation,link_event,memory_id,chapter,…}；shipnation 观测值 {1,2,3,4,5,6,7,10,11,97}',
+    minRows: 90,
+    measured: true,
+    tier: 'B',
+  }),
+  equipByQuality: T({
+    dir: 'ShareCfg',
+    name: 'equip_data_by_quality',
+    top: 'dict',
+    keyStrategy: 'numeric-excluding-all',
+    semantic:
+      '装备档位经济表（gear_score / gear_score_addition / destory_resource_ratio）。名字像品质标签表，实际**没有任何显示名字段** —— 装备稀有度在 CN 数据里没有文本源，只能人工登记',
+    evidence: '6 档 + all:[1,2,3,4,5,6]；单条字段仅 {destory_resource_ratio, equip_quality, gear_score, gear_score_addition}',
+    minRows: 6,
     measured: true,
     tier: 'A',
   }),

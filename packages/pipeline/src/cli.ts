@@ -4,6 +4,12 @@ import { TABLES, assertSpec, relPath, type TableKey } from './tables.ts'
 import { STAGE1_TABLES, whitelistFor, STUB_PROBES } from './whitelist.ts'
 import { resolveSha, downloadTarball, fetchTree, extractWhitelist, readTable, topDir } from './fetch/fetch.ts'
 import { buildAttrMap, assertMatchesEnemy, assertArrayLength } from './normalize/attr-map.ts'
+import { manualPath } from './paths.ts'
+import { buildNameCode, assertAllResolve, placeholderCount } from './normalize/name-code.ts'
+import { readShipRows, groupStageRows, rarityBySkin, assertStageShape } from './normalize/stage-rows.ts'
+import { readGametip } from './display/gametip.ts'
+import { loadFactions, assertNamesAgreeWithGametip, assertCovers } from './display/factions.ts'
+import { loadRarityDecl, buildShipRarity, assertObservedRarity } from './display/rarity.ts'
 
 const ROOT = join(import.meta.dirname!, '..', '..', '..')
 const RAW = join(ROOT, 'data', 'raw')
@@ -120,6 +126,53 @@ async function cmdValidate(): Promise<void> {
     log(`  [${String(a.index).padStart(2)}] ${a.name.padEnd(13)} ${a.label}  (id ${a.id})`)
   }
   log('PASS：与 enemy_data_statistics 具名字段键集一致；三个舰船数组定长 12 校验通过')
+
+  // ── 1.6 阵营与稀有度：人工表只钉「数字 → 身份」这一跳，文本一律回到上游比对 ──
+  const tip = readGametip(root, sha)
+  const factions = loadFactions(manualPath(ROOT, 'factions'))
+  assertNamesAgreeWithGametip(factions, tip)
+  const grpRaw = readTable(root, sha, relPath(TABLES.shipGroup)) as Record<string, { nationality: number }>
+  const observedNat = Object.values(grpRaw).map((g) => g.nationality)
+  assertCovers(factions, observedNat)
+
+  const decl = loadRarityDecl(manualPath(ROOT, 'rarity'))
+  const shipRarity = buildShipRarity(tip, decl.ship.declaredDomain)
+  const shipRows = readShipRows(root, sha)
+  const shape = assertStageShape(shipRows, { stageRows: 3400, others: 0, skins: 850, exactlyFour: 850 })
+  const groups = groupStageRows(shipRows)
+  const rarBySkin = rarityBySkin(groups)
+  const rarObs = new Map<number, number>()
+  for (const r of rarBySkin.values()) rarObs.set(r, (rarObs.get(r) ?? 0) + 1)
+  assertObservedRarity(rarObs, decl.ship)
+
+  const nameCode = buildNameCode(root, sha)
+  const skinRaw = readTable(root, sha, relPath(TABLES.shipSkinTemplate)) as Record<string, { skin_type: number; name: string }>
+  const baseNames = Object.values(skinRaw).filter((s) => s.skin_type === -1).map((s) => s.name)
+  assertAllResolve(baseNames, nameCode)
+
+  const perNat = new Map<number, number>()
+  for (const n of observedNat) perNat.set(n, (perNat.get(n) ?? 0) + 1)
+  log('')
+  log(`阵营（${factions.length} 条登记 / ship_data_group 实出 ${perNat.size} 个值）`)
+  for (const f of factions) {
+    const c = perNat.get(f.nationality) ?? 0
+    log(`  ${String(f.nationality).padStart(3)} ${f.slug.padEnd(26)} ${f.name.padEnd(12)} ${String(c).padStart(4)} 条  ${f.source}`)
+  }
+  log('')
+  log(
+    `舰船稀有度（阶段行 ${shape.stageRows} 行 / ${shape.skins} 个 skin_id，其中 ${shape.exactlyFour} 组正好 4 行；` +
+      `非阶段行 ${shape.others} 行不参与）`,
+  )
+  for (const r of shipRarity) {
+    log(`  ${r.value} ${r.label.padEnd(6)} ${rarObs.get(r.value) ?? 0} 艘`)
+  }
+  for (const k of decl.ship.knownUnmapped) {
+    log(`  ${k.value} （无标签，${rarObs.get(k.value) ?? 0} 行）→ ${k.handling}`)
+  }
+  log(`装备稀有度 ${decl.equip.declaredDomain.join('/')} 档，labelPolicy=${decl.equip.labelPolicy}（CN 数据无文本源）`)
+  log('')
+  log(`船名解析：规范名 ${baseNames.length} 条，其中占位 ${placeholderCount(baseNames)} 条，name_code ${nameCode.size} 条全命中`)
+  log('PASS：阵营覆盖与文本、稀有度取值域两侧对齐、船名占位全解析')
 }
 
 /**

@@ -1,0 +1,24 @@
+{
+  "note": "稀有度只登记四件事：字段在哪、取值域是什么、标签从哪张表读、读不到怎么办。标签文本不在这里抄一遍——构建期从 CN/sharecfgdata/gametip 按 labelKey 读出，与本表 declaredDomain 逐条比对，两侧不一致即中止。",
+  "ship": {
+    "field": "ship_data_statistics.rarity",
+    "rowScope": "只认阶段行：id - skin_id ∈ 1..4（3,429 行 / 860 个 skin_id，其中 856 组正好 4 行）。其余 528 行是 attrs 全 1 的展示单位与 id 自指的非舰船行，不参与舰船稀有度；判据是字段关系，不是 id 阈值",
+    "labelKeyPattern": "index_rare{value}",
+    "labelSource": "CN/sharecfgdata/gametip",
+    "declaredDomain": [2, 3, 4, 5, 6],
+    "domainEvidence": "阶段行的 rarity 在每个 skin_id 内唯一（0 例冲突），实测取值恰好 {2,3,4,5,6}；gametip 的 index_rare* 也恰好只有 2..6 五个键（index_rare1 不存在），两侧一一对上。非阶段行里另有 3 行 rarity=18（拉斐尔 900487 等），它们不是舰船阶段行，不为它们扩枚举",
+    "unmappedPolicy": "fail",
+    "knownUnmapped": [],
+    "forbidStarAsRarity": true,
+    "forbidStarEvidence": "star 是突破阶段（1→6，ship_data_by_star 是星级经济表），同一艘船的 4 个阶段行 star 各不相同而 rarity 相同；rarity 与 star 在 ship_data_statistics 里是两个独立字段"
+  },
+  "equip": {
+    "field": "equip_data_statistics.rarity",
+    "labelKeyPattern": null,
+    "declaredDomain": [1, 2, 3, 4, 5, 6],
+    "domainEvidence": "equip_data_statistics 10,365 行中 1,524 行带 rarity，实测取值 {1..6}：1=556 / 2=130 / 3=212 / 4=273 / 5=324 / 6=29，其余 8,841 行无此字段（等级行不重复声明稀有度）；CN/ShareCfg/equip_data_by_quality 有 1..6 六档，但字段只有 gear_score、gear_score_addition、destory_resource_ratio、equip_quality，没有任何显示名",
+    "labels": null,
+    "labelPolicy": "numeric",
+    "detail": "装备稀有度在 CN 数据里没有文本源，站点只显示档位数字与配色，不编「精锐/超稀有」这类舰船侧的词。/data-quality 公开记这一条"
+  }
+}

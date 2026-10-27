@@ -1,0 +1,237 @@
+{
+  "note": "数字 nationality → 阵营身份。数据里没有任何一张表带这条链（CN 全仓只有 lover_nation 与 memory_storyline 出现数字阵营，二者都不带阵营名），所以这一跳是人工层。显示名不写在这里：构建期按 wordKey 从 CN/sharecfgdata/gametip 的 word_shipNation_* 读出，与本表 name 逐条比对，不一致即中止。source 取值见 PLAN.md §11 C。",
+  "factions": [
+    {
+      "nationality": 1,
+      "wordKey": "baiYing",
+      "slug": "eagle-union",
+      "name": "白鹰",
+      "source": "data-text",
+      "evidence": "memory_storyline 30「迷雾之下」与 40「渐入迷踪」的 description 出现「白鹰」，两条 shipnation 恰为 [1]"
+    },
+    {
+      "nationality": 2,
+      "wordKey": "huangJia",
+      "slug": "royal-navy",
+      "name": "皇家",
+      "source": "data-text",
+      "evidence": "memory_storyline 50「意外的旅途」shipnation 恰为 [2] 且文本含「皇家」；39「皇家号令」shipnation [2,10,1]"
+    },
+    {
+      "nationality": 3,
+      "wordKey": "chongYing",
+      "slug": "sakura-empire",
+      "name": "重樱",
+      "source": "data-text",
+      "evidence": "memory_storyline 89「重樱的邀约」shipnation 恰为 [3]，bgm story-newsakura； lover_nation 3 letter=jp"
+    },
+    {
+      "nationality": 4,
+      "wordKey": "tieXue",
+      "slug": "iron-blood",
+      "name": "铁血",
+      "source": "data-text",
+      "evidence": "memory_storyline 9「铁血、音符与誓言·上」shipnation 恰为 [4]；13「铁血、音符与誓言·下」[4,2]"
+    },
+    {
+      "nationality": 5,
+      "wordKey": "dongHuang",
+      "slug": "dragon-empire",
+      "name": "东煌",
+      "source": "ship-identity",
+      "evidence": "lover_nation 5 letter=cn；26 条船名为中国近代舰（鞍山/抚顺/长春/太原/逸仙/宁海/平海/镇海）。数据文本未出现「东煌」"
+    },
+    {
+      "nationality": 6,
+      "wordKey": "saDing",
+      "slug": "sardinian-empire",
+      "name": "撒丁帝国",
+      "source": "data-text",
+      "evidence": "memory_storyline 8「神圣的悲喜剧」/42「复兴的赞美诗」/63「绿洲往事」shipnation 恰为 [6]，bgm 键 battle-boss-italy 与 story-italy；52「撒丁的邀约」shipnation 首位是 6，bgm story-roma-outside"
+    },
+    {
+      "nationality": 7,
+      "wordKey": "beiLian",
+      "slug": "northern-parliament",
+      "name": "北方联合",
+      "source": "ship-identity",
+      "evidence": "memory_storyline 36「破晓冰华」/47「黎明之暗」/62「极地风暴」shipnation 恰为 [7]，bgm 键 bgm-cccp / bgm-cccp2 / bgm-cccp3；38 条船名为苏联舰（阿芙乐尔/基洛夫/塔什干/甘古特/苏维埃罗西亚）"
+    },
+    {
+      "nationality": 8,
+      "wordKey": "ziyou",
+      "slug": "iris-libre",
+      "name": "自由鸢尾",
+      "source": "inferred",
+      "evidence": "27 条船全是法国舰名。与 9 的区分只靠史实归属：本组舰只投自由法国（黎塞留/贝亚恩/凯旋/鲁莽/倔强/絮库夫/福尔班/埃米尔·贝尔汀），而两组共同出自「光与影的鸢尾之华」事件，数据内没有数字↔词键的链"
+    },
+    {
+      "nationality": 9,
+      "wordKey": "weixi",
+      "slug": "vichya-dominion",
+      "name": "维希教廷",
+      "source": "inferred",
+      "evidence": "24 条船全是法国舰名。本组舰只留在维希政权（敦刻尔克/斯特拉斯堡/让·巴尔/阿尔及利亚/拉·加利索尼埃/霞飞/克莱蒙梭），与 8 的划分同属史实判定而非表内读出"
+    },
+    {
+      "nationality": 10,
+      "wordKey": "yuanwei",
+      "slug": "iris-holy-see",
+      "name": "鸢尾教国",
+      "source": "inferred",
+      "evidence": "lover_nation 有 10、memory_storyline 25 处引用 10（64「奏响鸢尾之歌」shipnation 恰为 [10]，bgm theme-irisangel），但 ship_data_group 无一条 nationality=10：这是只在剧情侧出场的战前鸢尾，玩家长不下它的船。8/9 的候选名因此只剩自由鸢尾与维希教廷"
+    },
+    {
+      "nationality": 11,
+      "wordKey": "yujinwangguo",
+      "slug": "tulip-kingdom",
+      "name": "郁金王国",
+      "source": "data-text",
+      "evidence": "11 的 3 条船（七省/埃佛森/金狮）description 为「限时活动：扬起郁金之旗」与科研开发；memory_storyline 86「扬起郁金之旗」shipnation [11,4,7]，bgm story-tulipa"
+    },
+    {
+      "nationality": 96,
+      "wordKey": "mot",
+      "slug": "hurricane",
+      "name": "飓风",
+      "source": "data-text",
+      "evidence": "96 的 16 条船 description 全部为「限时活动：飓风与青春之泉／沉眠之海／自由群岛」或万圣节的「奇遇」；gametip battle_text_haidao_1 原文「侦测到非「飓风」舰船」；16 条 type 全为 22/23/24（风帆）"
+    },
+    {
+      "nationality": 97,
+      "wordKey": "meta_index",
+      "slug": "meta",
+      "name": "META",
+      "source": "data-text",
+      "evidence": "handbook_type=3 的 59 条全部落在 97；lover_nation 97 letter=meta；50 条 description 文本含「META」。注意 word_shipNation_meta 的 tip 是「???」，可读的那个是 word_shipNation_meta_index"
+    },
+    {
+      "nationality": 98,
+      "wordKey": "other",
+      "slug": "other",
+      "name": "其他",
+      "source": "structural",
+      "evidence": "3 条为突破素材船（泛用型布里/试作型布里MKII/特装型布里MKIII ），description 只有勋章商店、军需商店、每周任务、原型商店，没有任何阵营文本；32 个 word_shipNation_* 里能容纳它的只剩 other。页面按「其他」分组，不宣称这是游戏内的阵营名"
+    },
+    {
+      "nationality": 101,
+      "wordKey": "np",
+      "slug": "hyperdimension-neptunia",
+      "name": "海王星",
+      "source": "ship-identity",
+      "evidence": "8 条船：涅普顿/诺瓦露/布兰/贝露/绀紫之心/圣黑之心/群白之心/翡绿之心（超次元游戏 海王星）"
+    },
+    {
+      "nationality": 102,
+      "wordKey": "bili",
+      "slug": "bilibili",
+      "name": "哔哩哔哩",
+      "source": "ship-identity",
+      "evidence": "2 条船名即「22」「33」，对应哔哩哔哩站娘 22 娘 / 33 娘"
+    },
+    {
+      "nationality": 103,
+      "wordKey": "um",
+      "slug": "utawarerumono",
+      "name": "传颂之物",
+      "source": "ship-identity",
+      "evidence": "6 条船：久远/猫音/露露缇耶/乌璐露/萨拉娜/芙米露露"
+    },
+    {
+      "nationality": 104,
+      "wordKey": "ai",
+      "slug": "kizunaai",
+      "name": "KizunaAI",
+      "source": "ship-identity",
+      "evidence": "4 条船：绊爱 / 绊爱·Elegant / 绊爱·Anniversary / 绊爱·SuperGamer"
+    },
+    {
+      "nationality": 105,
+      "wordKey": "holo",
+      "slug": "hololive",
+      "name": "hololive",
+      "source": "ship-identity",
+      "evidence": "7 条船：白上吹雪/时乃空/湊阿库娅/夏色祭/百鬼绫目/紫咲诗音/大神澪"
+    },
+    {
+      "nationality": 106,
+      "wordKey": "doa",
+      "slug": "venus-holiday",
+      "name": "维纳斯假期",
+      "source": "ship-identity",
+      "evidence": "15 条船：玛莉萝丝/穗香/霞/海咲/凪咲/女天狗/莫妮卡/露娜（死或生 沙滩排球 维纳斯假期）"
+    },
+    {
+      "nationality": 107,
+      "wordKey": "imas",
+      "slug": "idolmaster",
+      "name": "偶像大师",
+      "source": "ship-identity",
+      "evidence": "7 条船：天海春香/如月千早/水濑伊织/三浦 梓/秋月律子/双海亚美/双海真美"
+    },
+    {
+      "nationality": 108,
+      "wordKey": "ssss",
+      "slug": "ssss-gridman",
+      "name": "SSSS",
+      "source": "ship-identity",
+      "evidence": "9 条船：宝多六花/新条茜/莲/奈美子/南梦芽/飞鸟川千濑/貉/第二代（SSSS.GRIDMAN / SSSS.DYNAZENON）"
+    },
+    {
+      "nationality": 109,
+      "wordKey": "ryza",
+      "slug": "atelier-ryza",
+      "name": "Atelier Ryza",
+      "source": "ship-identity",
+      "evidence": "6 条船：莱莎琳·斯托特/科洛蒂娅·巴兰茨/帕特莉夏·阿贝尔海姆/莉拉·德西亚斯/赛莉·古劳斯/卡菈·伊迪亚斯"
+    },
+    {
+      "nationality": 110,
+      "wordKey": "senran",
+      "slug": "senrankagura",
+      "name": "闪乱神乐",
+      "source": "ship-identity",
+      "evidence": "7 条船：飞鸟/斑鸠/焰/雪泉/雪不归/紫/夕烧"
+    },
+    {
+      "nationality": 111,
+      "wordKey": "tolove",
+      "slug": "to-love-ru",
+      "name": "To LOVE-Ru",
+      "source": "ship-identity",
+      "evidence": "6 条船：菈菈·撒塔琳·戴比路克/娜娜·阿丝达·戴比路克/梦梦·贝莉雅·戴比路克/金色暗影/西连寺春菜/古手川唯"
+    },
+    {
+      "nationality": 112,
+      "wordKey": "brs",
+      "slug": "black-rock-shooter",
+      "name": "BLACK★ROCK SHOOTER",
+      "source": "ship-identity",
+      "evidence": "2 条船：BLACK★ROCK SHOOTER / DEAD MASTER"
+    },
+    {
+      "nationality": 113,
+      "wordKey": "yumia",
+      "slug": "atelier-yumia",
+      "name": "Atelier Yumia",
+      "source": "ship-identity",
+      "evidence": "4 条船：优米雅·利斯菲尔德/艾菈·冯·杜勒/妮娜·弗里德/蕾妮雅"
+    },
+    {
+      "nationality": 114,
+      "wordKey": "danmachi",
+      "slug": "danmachi",
+      "name": "danmachi",
+      "source": "ship-identity",
+      "evidence": "2 条船：赫斯缇雅 / 琉·璃昂，均为《在地下城寻求邂逅是否搞错了什么》（danmachi）角色；gametip word_shipNation_danmachi 的 tip 就是 danmachi"
+    },
+    {
+      "nationality": 115,
+      "wordKey": "dal",
+      "slug": "date-a-live",
+      "name": "Date A Live",
+      "source": "ship-identity",
+      "evidence": "6 条船：夜刀神十香/鸢一折纸/五河琴里/四糸乃/时崎狂三/八舞耶俱矢・八舞夕弦"
+    }
+  ]
+}
