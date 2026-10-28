@@ -1126,6 +1126,11 @@ export function getSourcesForItem(itemId: number): ChapterSource[]
 | 装备位 | 同表 `equip_1..equip_5`，类型名回读 `equip_data_by_type` | 17,135 行 = 3,427 阶段行 × 5；**835/859 艘四阶段一致**，24 艘突破后多放出一种类型。槽位含义随舰种变（槽 1 可以是舰炮 / 防空炮 / 战斗机），页面只列「能装什么」，不给槽位起名 |
 | 装备类型名 | `type_name` 粗、`type_name2` 分舰种 | 19 类；1=舰炮(驱逐)、4=舰炮(战列)；6 与 21 同名「防空炮」，显示按名字合并 |
 | 六维评级 | `ship_data_group.property_hexagon` | 859/859 都是「6 个取自 {S,A,B,C,D,E} 的字母」，字母表外零例外 |
+| 语音文本 | `ship_skin_words` 顶层键 = `ship_skin_template.id` | 2,485 行**全部**命中皮肤表；拆 `main` 的竖线后 43,495 条台词，859 艘船每艘都有语音。场景字段共 79 个（34 个基础场景 + `*_replace` 换装变体 + asmr_/atelier_/dal_/ryza_ 联动扩展） |
+| 语音的场景名 | gametip 里**没有** voice 场景词条 | 没有 CN 文本源可回读，页面直接显示字段键名并记进数据边界——自己贴中文名就是抄文本，无法构建期校验 |
+| `voice_key` | 852 行等于本组 / 1,516 行为 0 / **117 行指向别处** | 不能当舰船链接用，疑似「这套语音被哪艘船复用」但语义没有源，**不消费**；链接只走皮肤表 |
+| `gift_prefer` / `gift_dislike` | 2,485 行全空 | 不进产物；上游哪天填了内容 → 进隔离清单，因为那说明口径变了 |
+| `couple_encourage` | 1,478 条里 **11 条不是** `[数组, 数, 字符串, 数]` | 形态不统一且第一个元素的触发条件语义未盘清，**这一列不进产物也不显示**（阶段 2 待办） |
 | 改造后技能 | `ship_data_group.trans_skill`（11870 神射手·改） | 那一行 `id - skin_id = 104`，不是阶段行，因此**不进 `ship_skill`**；改造块目前只有节点描述，改造后技能名仍是缺口 |
 
 **六维的六个位置不是属性顺序。** 照 `attribute_info_by_type` 的 id 1..6 贴标签会错四个，实测顺序是 **炮击 / 雷击 / 航空 / 机动 / 防空 / 耐久**（厌战 = 炮击 S、耐久 A、雷击与航空 E；卡辛 = 机动 B 最高、航空 E 最低）。定位方法：856 条可比船，取最高阶段行的 12 项属性与该船六位字母，逐位算 \|Spearman\| 取最大项，得 .86 / .95 / 1.00 / .87 / .72 / .82，六个最大项互不相同；第 4 位 dodge .87 与 speed .81 贴近，用 12 项属性的岭回归与控住对方的偏相关复核，是 dodge **.514** 对 speed **.210**。构建期不复算回归，但每次 normalize 都重跑逐位取最大项这一步并断言三件事：可比样本 ≥ 500、每位最大相关 ≥ 0.6、六位互不相同——上游改了数组顺序或换了口径，这里就停，不会静默地把雷达六个轴贴错名。
@@ -1195,10 +1200,12 @@ export function getSourcesForItem(itemId: number): ChapterSource[]
 | 指标 | 实测 | 预算 | 判定 |
 |---|---|---|---|
 | 产物文件数 | 1,740（本地）/ 1,738（CI） | < 18,000 | 1,718 来自路由本身 |
-| 产物总体积 | 实际字节 64.24 MiB（HTML 41.16 + RSC 22.29 + JS/CSS 0.79）；`du -sh` 在 CI 上报 60M+，是块对齐值 | — | RSC 载荷占实际字节 34.7% |
-| 最大单文件 | 219,010 B（`framework-*.js`）；最大的 HTML 是 63,694 B | < 25 MiB | 余量四个数量级 |
-| 单页 HTML | 27,620 – 63,694 B（中位 49,932） | < 60KB gzip | 最大一页 gzip **8,960 B**，余量 6.9× |
-| 单页 RSC 载荷 | 15,738 – 34,046 B（中位 27,072） | — | 只在客户端导航时取，不进首屏 |
+| 产物总体积 | 实际字节 88.30 MiB（HTML 56.61 + RSC 30.89 + JS/CSS 0.80）；`du -sh` 在 CI 上报的更大值是块对齐值 | — | RSC 载荷占实际字节 35% |
+| 最大单文件 | 219,010 B（`framework-*.js`）；最大的 HTML 是 134,968 B | < 25 MiB | 余量四个数量级 |
+| 单页 HTML | 43,782 – 134,968 B（中位 67,363，P90 82,003） | < 60KB gzip | 最大一页 gzip **28,841 B**，余量 2.1× |
+| 单页 RSC 载荷 | 24,817 – 74,996 B（中位 36,722） | — | 只在客户端导航时取，不进首屏 |
+
+**语音文本把页面体积推上去多少**：入库前最大页 63,694 B（gzip 8,960），入库后 134,968 B（gzip 28,841）——余量从 6.9× 掉到 2.1×，仍然是预算内的，但**增长全落在多皮肤船**（Z23 15 个皮肤、绫波 16 个，语音按皮肤给，一个皮肤一个折叠块）。单皮肤船的页面前后只差几 KB。阶段 3 加装备/技能页时要以「皮肤数 × 每皮肤文本量」估页面，而不是按条目数估。
 | 首屏 JS | 4 个 chunk / **100.3 KiB gzip**（`polyfills-*.js` 带 `noModule`，现代浏览器不取） | < 170KB gzip | 通过，余量 41%；与 Next 自己报的 First Load JS 102 kB 对上 |
 | 首屏 CSS | 1,389 B（gzip 683） | — | 无自定义字体 |
 
@@ -1792,7 +1799,7 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 | 1.5 | `attr-map.ts` 由 `attribute_info_by_type` 生成 + 与 `enemy_data_statistics` 键集交叉断言 | 属性定义落地 |
 | 1.6 | `data/manual/factions.json`（29 条，`nationality → wordKey → slug`）与 `data/manual/rarity.json`（两段声明）；显示名与标签构建期从 gametip 读回并逐条比对 | 阵营覆盖 + 稀有度取值域两侧对齐 + 船名占位全解析 |
 | 1.7 | normalize 三层 + 改造 + 舰队科技（`ship` / `ship_stage` / `ship_skin` / `ship_retrofit` / `fleet_tech`）+ 枚举表 + `manifest.json`，全部 join 断言内置 | 实测 859 / **3,427**（表内阶段行 3,429，skin 900424 的 2 行属于 352 个孤儿 group 之一，进隔离清单不入库）/ 2,730 / 106 / (4+36+726)，产物 226.0KB gz，隔离清单 529 条 |
-| 1.8 | emit JSONL → 建 SQLite（21 表、外键常开、逐表行数与 jsonl 对账、`PRAGMA integrity_check`） | `data/al.sqlite` 5.59 MiB 可查：ship 859 · ship_stage 3,427 · ship_stage_attr 41,124 · ship_stage_slot 17,135 · ship_skill 9,239 · ship_skin 2,730 · orphan_skin 358 · ship_source 1,432 · retrofit_node 1,217 · fleet_tech_ship 726 · hexagon_axis 6 · equip_kind 19；两次建库逐字节相同；建库 < 1s；`$TURBO_ROOT$` 输入指纹按 §6.5 实测表逐条通过 |
+| 1.8 | emit JSONL → 建 SQLite（22 表、外键常开、逐表行数与 jsonl 对账、`PRAGMA integrity_check`） | `data/al.sqlite` 12.02 MiB 可查：ship 859 · ship_stage 3,427 · ship_stage_attr 41,124 · ship_stage_slot 17,135 · ship_skill 9,239 · ship_voice 43,495 · ship_skin 2,730 · orphan_skin 358 · ship_source 1,432 · retrofit_node 1,217 · fleet_tech_ship 726 · hexagon_axis 6 · equip_kind 19；两次建库逐字节相同；建库 < 1s；`$TURBO_ROOT$` 输入指纹按 §6.5 实测表逐条通过 |
 | 1.9 | 图片：1 艘船的 icon + 默认立绘 + 1 张换装，**skinId 精确 join** → sharp → LocalAdapter（**仅本地验证，不上线**） | 实测 `--limit=1`（group 10000）出 7 个产物、`--group=20502` 再 7 个，共 14 文件 992KB；全部 EN 命中、零降级；第二次跑同一艘船下载 0 张跳过 7 项 |
 | 1.10 | Next.js 脚手架 + `/ship/[groupType]`（**仅 1 艘**）+ §4.6 全部配置项 | 实测：`out/` 24 文件 953KB，详情页 HTML 47.7KB，首页 First Load JS 106KB；`/ship/99999/` 走 404；页面渲染 12 项属性表 + 12 张 1–100 端点图 + 5 个皮肤（含 CV）+ 12 条改造节点（中文 descrip，机器格式 effect 不入库展示）+ 舰级与科技点 + 3 条获取方式；构建期与浏览器双端零 console 错误 |
 | 1.11 | 部署 Pages（**无图版本**，立绘位置渲染占位块） | 实测：`wrangler pages project create blhx-guide` + `pages deploy apps/web/out` 直传 24 文件，3.46s 上传完成。线上 `https://blhx-guide.pages.dev/` 与 `/ship/20502/` 均 200，`/ship/99999/` 404；线上 HTML 里 `undefined/`、`/_next/image`、`<img>` 全部 0 命中 |
@@ -1818,7 +1825,7 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 
 CI 侧已在 run #3（`ef6301e`，通道 A）全绿核过：`产物文件数 1,738（Linux）/ 1,740（本地）`、`路由覆盖一致：图鉴 859 条 / 已渲染 859 页 / 首页在位`、直传 21 秒、`pnpm build` 冷构建 23 秒、整条 job 75 秒（含取机、装依赖、部署与线上自检）。线上按 `ship` 表抽样 8 页（10000 / 10329 / 20511 / 30512 / 40407 / 80204 / 1030003 / 1150006）全部 200，未渲染路径 404。
 
-**2.2 详情页补全（技能 / 装备位 / 六维，已跑通，D-verified 2026-10-28）**：`ship_data_template`（注册过但一直没被消费的那张表）进入链路，新增 `ship_skill` 9,239 行、`ship_stage_slot` 17,135 行、`hexagon_axis` 6 行、`equip_kind` 19 行，`ship` 加 `hexagon` 列；schema_version 1 → 2，库 2.83 MiB → 5.59 MiB，两次建库仍逐字节相同。三条链路的判据与被推翻的猜测都记在 §4.3，其中最重要的一条是**六维数组的顺序不是属性顺序**，照 id 贴标签会错四个轴。改造后技能名（`trans_skill` 指向 11870「神射手·改」）不在阶段行上，仍是缺口。**语音文本还没做**：`ship_skin_words` 注册在表里但不在取数白名单（`STAGE1_TABLES`）内，要先加白名单、跑一次取数（5.90 MB）再归一化。
+**2.2 详情页补全（技能 / 装备位 / 六维，已跑通，D-verified 2026-10-28）**：`ship_data_template`（注册过但一直没被消费的那张表）进入链路，新增 `ship_skill` 9,239 行、`ship_stage_slot` 17,135 行、`hexagon_axis` 6 行、`equip_kind` 19 行，`ship` 加 `hexagon` 列；schema_version 2，`data/al.sqlite` 22 表（终态规模见 §7 1.8 行），两次建库仍逐字节相同。三条链路的判据与被推翻的猜测都记在 §4.3，其中最重要的一条是**六维数组的顺序不是属性顺序**，照 id 贴标签会错四个轴。改造后技能名（`trans_skill` 指向 11870「神射手·改」）不在阶段行上，仍是缺口。**2.2b 语音文本（已跑通，D-verified 2026-10-28）**：`shipSkinWords` 加进取数白名单（解出 25/25），对固定 SHA 的 tarball 重解包——上游 main 仍是 `4cca5c24…`，数据代次没变，只是本地多出 6.04 MB 源文件；归一化出 `ship_voice` 43,495 条（2,485 个皮肤 × 79 个场景字段拆竖线后的全部非空文本），859 艘船每艘都有语音。入库的 `data/normalized/ship-voice.jsonl.gz` 1.78 MiB。场景名没有 CN 文本源，页面显示字段键名并记进数据边界；`voice_key` / `gift_prefer` / `gift_dislike` / `couple_encourage` 各自的问题见 §4.3 的表，都不消费。页面体积影响见 §4.5（最大页 gzip 8,960 → 28,841 B，增长全落在多皮肤船）。**改造后技能名仍未做**：要把 `trans_skill` 的 id 换成名字，需要一张 skill 字典表。
 
 - 扩至 859 条目 / 3,427 阶段行入库（表内阶段行 3,429，覆盖 860 个 skin_id，其中 2 行属孤儿 group 进隔离清单）/ 2,730 皮肤；落实正向枚举过滤（阶段 1 已跑通，见 §7 1.7 实测行）
 - 详情页完整：六维雷达、**1–100 级**属性曲线（含 `attrs_growth_extra`，见 §3.7）、突破表、装备位与效率、**技能名与描述文本**（buff 机制与触发数值不在范围，§8.2）、皮肤画廊、改造分支、舰队科技点、**语音文本**（B 档 `ship_skin_words`）、获取方式（含跳转文案）

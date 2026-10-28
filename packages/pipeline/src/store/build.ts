@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { DDL, SCHEMA_VERSION } from './schema.ts'
 import type { ShipRecord, ShipStageRecord, ShipSkinRecord, ShipSlotRecord, ShipSkillRecord } from '../normalize/ship.ts'
 import type { RetrofitRecord } from '../normalize/retrofit.ts'
+import type { VoiceRecord } from '../normalize/voice.ts'
 import type { FleetTechRow } from '../normalize/fleet-tech.ts'
 import type { EnumRow } from '../normalize/enums.ts'
 
@@ -24,6 +25,7 @@ export const FILES = {
   ships: 'ships.jsonl.gz',
   stages: 'ship-stages.jsonl.gz',
   skins: 'ship-skins.jsonl.gz',
+  voice: 'ship-voice.jsonl.gz',
   slots: 'ship-slots.jsonl.gz',
   skills: 'ship-skills.jsonl.gz',
   retrofits: 'ship-retrofits.jsonl.gz',
@@ -52,6 +54,7 @@ interface Dataset {
   ships: ShipRecord[]
   stages: ShipStageRecord[]
   skins: ShipSkinRecord[]
+  voice: VoiceRecord[]
   slots: ShipSlotRecord[]
   skills: ShipSkillRecord[]
   retrofits: RetrofitRecord[]
@@ -142,6 +145,9 @@ function insertAll(db: DatabaseSync, d: Dataset): number {
     }
   }
 
+  const insVoice = db.prepare('INSERT INTO ship_voice (skin_id, scene, seq, text) VALUES (?,?,?,?)')
+  for (const v of d.voice) insVoice.run(v.skinId, v.scene, v.seq, v.text)
+
   const insSource = db.prepare('INSERT INTO ship_source (group_type, seq, text, command, args) VALUES (?,?,?,?,?)')
   for (const s of d.ships) {
     s.sources.forEach((e, i) => insSource.run(s.groupType, i, e.text, e.command, e.args ? json(e.args) : null))
@@ -194,7 +200,7 @@ function insertAll(db: DatabaseSync, d: Dataset): number {
 const TABLES = [
   'faction', 'attr_def', 'hexagon_axis', 'rarity', 'hull_type', 'equip_kind', 'ship', 'ship_stage',
   'ship_stage_attr', 'ship_stage_slot', 'ship_skill', 'ship_skin',
-  'orphan_skin', 'ship_source', 'retrofit', 'retrofit_node', 'fleet_tech_group', 'fleet_tech_node',
+  'orphan_skin', 'ship_voice', 'ship_source', 'retrofit', 'retrofit_node', 'fleet_tech_group', 'fleet_tech_node',
   'fleet_tech_node_add', 'fleet_tech_ship',
 ] as const
 
@@ -202,6 +208,7 @@ export function buildDatabase(normalizedDir: string, outPath: string, dataSha: s
   const ships = readJsonl<ShipRecord>(normalizedDir, FILES.ships)
   const stages = readJsonl<ShipStageRecord>(normalizedDir, FILES.stages)
   const skins = readJsonl<ShipSkinRecord>(normalizedDir, FILES.skins)
+  const voice = readJsonl<VoiceRecord>(normalizedDir, FILES.voice)
   const slots = readJsonl<ShipSlotRecord>(normalizedDir, FILES.slots)
   const skills = readJsonl<ShipSkillRecord>(normalizedDir, FILES.skills)
   const retrofits = readJsonl<RetrofitRecord>(normalizedDir, FILES.retrofits)
@@ -216,6 +223,7 @@ export function buildDatabase(normalizedDir: string, outPath: string, dataSha: s
     ships,
     stages,
     skins,
+    voice,
     slots,
     skills,
     retrofits,

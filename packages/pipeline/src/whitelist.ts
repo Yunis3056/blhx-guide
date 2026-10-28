@@ -26,6 +26,8 @@ export const STAGE1_TABLES: TableKey[] = [
   'fleetTechTemplate',
   'fleetTechShipClass',
   'fleetTechShipTemplate',
+  // 语音文本：阶段 2.2b 起详情页要用。注册表里一直是 B 档，之前只是没进取数白名单
+  'shipSkinWords',
 ]
 
 export function whitelistFor(keys: TableKey[]): string[] {

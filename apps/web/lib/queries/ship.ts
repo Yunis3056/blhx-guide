@@ -285,3 +285,38 @@ export function getShipSlots(db: DatabaseSync, groupType: number): StageSlots[] 
   }
   return [...out.entries()].sort((a, b) => a[0] - b[0]).map(([stage, slots]) => ({ stage, slots }))
 }
+
+export interface SkinVoice {
+  skinId: number
+  skinName: string
+  scenes: Array<{ scene: string; lines: string[] }>
+}
+
+/**
+ * 语音文本按皮肤给：`ship_voice` 的粒度是 (皮肤, 场景, 序号)。
+ * 场景键名原样显示——CN 数据里没有给这些场景起中文名的文本源（gametip 里没有 voice 场景词条），
+ * 自己贴标签就是抄文本，所以保留字段原名并把它记进数据边界。
+ */
+export function getShipVoice(db: DatabaseSync, groupType: number): SkinVoice[] {
+  const rows = db
+    .prepare(
+      `SELECT v.skin_id, sk.name AS skin_name, v.scene, v.text
+       FROM ship_voice v
+       JOIN ship_skin sk ON sk.skin_id = v.skin_id
+       WHERE sk.group_type = ?
+       ORDER BY v.skin_id, v.scene, v.seq`,
+    )
+    .all(groupType) as Row[]
+  const out = new Map<number, SkinVoice>()
+  for (const r of rows) {
+    const skinId = num(r, 'skin_id')
+    if (!out.has(skinId)) out.set(skinId, { skinId, skinName: str(r, 'skin_name'), scenes: [] })
+    const skin = out.get(skinId)
+    if (skin === undefined) continue
+    const scene = str(r, 'scene')
+    const last = skin.scenes[skin.scenes.length - 1]
+    if (last !== undefined && last.scene === scene) last.lines.push(str(r, 'text'))
+    else skin.scenes.push({ scene, lines: [str(r, 'text')] })
+  }
+  return [...out.values()]
+}

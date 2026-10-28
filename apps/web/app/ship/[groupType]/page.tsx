@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { AttrCurve } from '../../../components/ship/attr-curve'
 import { openDb, readMeta } from '../../../lib/db'
-import { getShipPage, getHexagon, getShipSkills, getShipSlots, listShips } from '../../../lib/queries/ship'
+import { getShipPage, getHexagon, getShipSkills, getShipSlots, getShipVoice, listShips } from '../../../lib/queries/ship'
 
 /**
  * 舰船详情页。
@@ -55,6 +55,7 @@ export default async function ShipPage({ params }: { params: Promise<Params> }) 
   const slotRows = getShipSlots(db, group)
   const firstSkills = skillRows[0]
   const skillsSame = firstSkills !== undefined && skillRows.every((r) => skillKey(r.skills) === skillKey(firstSkills.skills))
+  const voiceRows = getShipVoice(db, group)
 
   return (
     <main>
@@ -218,6 +219,34 @@ export default async function ShipPage({ params }: { params: Promise<Params> }) 
         </tbody>
       </table>
       <p className="note">画师在解包数据里没有姓名字段，本页不展示（PLAN §8.2）。</p>
+
+      {voiceRows.length > 0 && (
+        <>
+          <h2>语音文本（{voiceRows.length} 个皮肤）</h2>
+          {voiceRows.map((v) => (
+            <details key={v.skinId}>
+              <summary>
+                {v.skinName}
+                <span className="note"> {v.scenes.reduce((n, s) => n + s.lines.length, 0)} 条</span>
+              </summary>
+              <ul>
+                {v.scenes.map((s) => (
+                  <li key={s.scene}>
+                    <code>{s.scene}</code>
+                    {s.lines.map((line, i) => (
+                      <p key={i}>{line}</p>
+                    ))}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ))}
+          <p className="note">
+            场景名沿用解包字段键名（<code>ship_skin_words</code> 的场景共 79 个），CN 数据里没有这些场景的中文词条源，
+            自己贴标签就成了抄文本。<code>couple_encourage</code> 是不等长嵌套数组、触发条件语义未盘清，暂不显示。
+          </p>
+        </>
+      )}
 
       {ship.retrofitNodes.length > 0 && (
         <>

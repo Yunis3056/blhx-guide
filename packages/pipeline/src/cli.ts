@@ -16,6 +16,7 @@ import { loadFactions, assertNamesAgreeWithGametip, assertCovers, factionMap } f
 import { loadRarityDecl, buildShipRarity, assertObservedRarity } from './display/rarity.ts'
 import { buildShipRecords } from './normalize/ship.ts'
 import { buildRetrofits } from './normalize/retrofit.ts'
+import { buildVoice } from './normalize/voice.ts'
 import { buildFleetTech } from './normalize/fleet-tech.ts'
 import { buildEnumRows } from './normalize/enums.ts'
 import { deriveHexagonAxes } from './normalize/hexagon.ts'
@@ -360,11 +361,13 @@ function cmdNormalize(argv: string[]): void {
   const enums = buildEnumRows(attrMap, shipRarity, hulls, factions, factionNames, equipKinds, hexagonAxes)
 
   const retrofits = buildRetrofits(root, sha)
+  const voice = buildVoice(root, sha)
 
   const files = [
     { name: 'ships.jsonl.gz', rows: built.ships },
     { name: 'ship-stages.jsonl.gz', rows: built.stages },
     { name: 'ship-skins.jsonl.gz', rows: built.skins },
+    { name: 'ship-voice.jsonl.gz', rows: voice.rows },
     { name: 'ship-slots.jsonl.gz', rows: built.slots },
     { name: 'ship-skills.jsonl.gz', rows: built.skills },
     { name: 'ship-retrofits.jsonl.gz', rows: retrofits },
@@ -373,7 +376,7 @@ function cmdNormalize(argv: string[]): void {
   ]
   const written: Array<ManifestFileEntry & { file: string }> = []
   for (const f of files) written.push({ file: f.name, ...writeJsonl(outDir, f.name, f.rows) })
-  const quarantineFile = writeJsonl(reportDir, 'quarantine.jsonl.gz', built.quarantine)
+  const quarantineFile = writeJsonl(reportDir, 'quarantine.jsonl.gz', [...built.quarantine, ...voice.quarantine])
 
   // manifest 只在这一步生成，且字段全由数据内容决定：时间戳不进 normalized，
   // 否则它作为构建指纹会让「数据没变」也触发整站重建
@@ -405,6 +408,7 @@ function cmdNormalize(argv: string[]): void {
     ['enum-hexagon-axis', enums.counts.hexagonAxis, 6],
     ['ship-slots', built.slots.length, 17135],
     ['ship-skills', built.skills.length, 9239],
+    ['ship-voice', voice.rows.length, 43495],
   ]
   log(`归一化 ${sha.slice(0, 12)} → data/normalized/`)
   for (const b of baselines) {

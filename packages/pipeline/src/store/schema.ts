@@ -136,6 +136,17 @@ CREATE TABLE ship_skin (
 );
 CREATE INDEX skin_ship ON ship_skin (group_type, skin_type);
 
+-- 语音文本。粒度是 (皮肤, 场景, 台词序号)：ship_skin_words 一行一个皮肤，
+-- 一格可能塞多条台词（main 实测 100% 含竖线），拆开才排得下序。
+CREATE TABLE ship_voice (
+  skin_id INTEGER NOT NULL REFERENCES ship_skin(skin_id),
+  scene   TEXT    NOT NULL,
+  seq     INTEGER NOT NULL,
+  text    TEXT    NOT NULL,
+  PRIMARY KEY (skin_id, scene, seq)
+);
+CREATE INDEX voice_skin ON ship_voice (skin_id);
+
 CREATE TABLE ship_source (
   group_type INTEGER NOT NULL REFERENCES ship(group_type),
   seq        INTEGER NOT NULL,

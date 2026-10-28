@@ -140,6 +140,32 @@ test('§4.3 的读路径逐条可查', { skip }, () => {
       ['炮击', '雷击', '航空', '机动', '防空', '耐久'],
     )
     assert.equal(get<{ hexagon: string }>(db, 'SELECT hexagon FROM ship WHERE group_type = 20502').hexagon, 'S,E,E,D,D,A')
+
+    // 语音：按皮肤给（厌战 5 个皮肤都有台词，默认皮肤 25 个场景 27 条）；
+    // main 一格塞多条台词，拆行后实测单场景最多 7 条；场景键名保留字段原名，
+    // 因为 CN 数据里没有场景的中文词条源，自己贴标签就成了抄文本
+    assert.deepEqual(
+      db
+        .prepare(
+          `SELECT sk.skin_id sid, COUNT(v.text) n FROM ship_skin sk JOIN ship_voice v ON v.skin_id = sk.skin_id
+           WHERE sk.group_type = 20502 GROUP BY sk.skin_id ORDER BY sk.skin_id`,
+        )
+        .all()
+        .map((r) => `${r.sid}:${r.n}`),
+      ['205020:27', '205021:11', '205022:14', '205023:12', '205029:8'],
+    )
+    assert.equal(count(db, 'SELECT COUNT(DISTINCT scene) AS n FROM ship_voice WHERE skin_id = 205020'), 25)
+    assert.equal(count(db, 'SELECT COUNT(DISTINCT scene) AS n FROM ship_voice'), 79)
+    assert.equal(get<{ m: number }>(db, "SELECT MAX(seq) AS m FROM ship_voice WHERE scene = 'main'").m, 7)
+    // 859 条船全都有语音；voice_key 不参与 join（852 行等于本组、1,516 行为 0、117 行指向别处）
+    assert.equal(
+      count(
+        db,
+        `SELECT COUNT(*) AS n FROM ship s WHERE NOT EXISTS
+         (SELECT 1 FROM ship_voice v JOIN ship_skin sk ON sk.skin_id = v.skin_id WHERE sk.group_type = s.group_type)`,
+      ),
+      0,
+    )
     assert.ok(get<{ name: string }>(db, 'SELECT name FROM retrofit_node WHERE group_type = 10103 LIMIT 1').name.length > 0)
     assert.equal(
       get<{ class_name: string }>(db, 'SELECT class_name FROM fleet_tech_ship WHERE group_type = 10102').class_name,
@@ -167,6 +193,7 @@ test('meta 里记了 schema 版本、来源 SHA 与逐表行数（不含时间�
     assert.equal(meta.get('count:ship_stage_attr'), '41124')
     assert.equal(meta.get('count:ship_stage_slot'), '17135')
     assert.equal(meta.get('count:ship_skill'), '9239')
+    assert.equal(meta.get('count:ship_voice'), '43495')
     assert.equal(meta.get('count:hexagon_axis'), '6')
     assert.equal(meta.get('count:equip_kind'), '19')
     assert.equal(meta.get('count:retrofit_node'), '1217')

@@ -21,6 +21,11 @@
       "bytes": 67553,
       "sha256": "fc4997d0594aa5afdca3f0a26faaa820cf3adfc53258499d633ffafdd293e146"
     },
+    "ship-voice.jsonl.gz": {
+      "rows": 43495,
+      "bytes": 1863509,
+      "sha256": "f60bd0917e1b5f75646bdef23c7520baab674362e181cba6b7a624741b581c4d"
+    },
     "ship-slots.jsonl.gz": {
       "rows": 17135,
       "bytes": 48007,
@@ -71,6 +76,7 @@
     "fleet_tech_group": "ShareCfg",
     "fleet_tech_template": "ShareCfg",
     "fleet_tech_ship_class": "ShareCfg",
-    "fleet_tech_ship_template": "ShareCfg"
+    "fleet_tech_ship_template": "ShareCfg",
+    "ship_skin_words": "sharecfgdata"
   }
 }
