@@ -1815,7 +1815,7 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 | `ci.yml` 构建 + 直传 **（2026-10-28 选定）** | GitHub Actions ubuntu-latest | 要把 Cloudflare 令牌存进仓库 Secrets；构建环境从 Pages 镜像换成 Actions 镜像，`node:sqlite` / `sharp` 要在新镜像里重测一次 |
 | Pages Git 集成（Connected） | Pages 自己的构建镜像 | 回到原命题：Pages Linux 镜像里 `node:sqlite` 与 `sharp` 的可用性未验；且 Root directory 必须留空为仓库根，填 `apps/web` 会跳过 emit 前置步骤（§4.6 的难察觉失败） |
 
-**Pages 默认开 HTML minify**：同一份 `out/ship/20502/index.html` 本地 47,712 字节，线上传回 44,826 字节；把两边都压掉标签间空白后逐字节相同（44,775）。所以「产物体积」有两个数，比对预算时要用线上数，而 §4.5 的守卫跑在本地 `out/` 上，留的余量天然覆盖这个差值。
+**直传不改写 HTML**：`/ship/20502/` 线上取回的字节数与本地 `out/` 里那份完全相同（82,009），45 处差异全部落在 `<script>` 引用的 chunk 名上——同一长度、不同十六进制，因为产物是在 Linux runner 上构建的，而 Linux 与 Windows 导出的共享 chunk 本来就不是同一批（§4.5 的 15 / 17 个 js）。标签结构两边一致（都是 4 行、同一处以 `>` 结尾），所以Pages 侧没有做体积可感的 HTML 压缩，比预算用哪个口径都一样。真正会变的是引用的 chunk 名，这也意味着**「本地重跑一遍就能拿到与线上一致的产物」不成立**，跨机一致性的范围只到数据层（§4.6 的 jsonl 与 sqlite 逐字节相同）。
 
 **令牌权限以实测为准**：这把令牌在 `GET /user/tokens/verify` 上返回 `Invalid API Token`，却能列账户下的 Pages 项目、能建项目、能直传部署——按提示判断会误判成「令牌不能用」，按调用结果判断才知道它够用。R2 的 S3 兼容凭证（access key / secret）在无图模式下完全没用到。
 
