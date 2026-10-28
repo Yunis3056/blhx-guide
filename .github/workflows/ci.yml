@@ -109,8 +109,9 @@ jobs:
             sleep 5
           done
           [ "$code" = "200" ] || { echo "::error::线上详情页返回 $code"; exit 1; }
-          # 抽样名单来自 scripts/check-routes.mjs，与预渲染名单同一份 SQL：舰船页与分类页
-          # 各按序取三个。直传是上千个文件的批量上传，只验一页排除不了「部分文件没落上新代」
+          # 抽样名单来自 scripts/check-routes.mjs --sample，与预渲染名单同一份 SQL：首页、列表页、
+          # 舰船页三个位置、分类页三个位置、筛选索引文件。直传是上千个文件的批量上传，
+          # 只验一页排除不了「部分文件没落上新代」
           samples=$(node scripts/check-routes.mjs --sample)
           for u in $samples; do
             c=$(curl -s -o /dev/null -w '%{http_code}' "https://blhx-guide.pages.dev$u")

@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { sha256File } from '../src/hash.ts'
 import { buildDatabase } from '../src/store/build.ts'
+import { buildClientIndex } from '../src/emit/client-index.ts'
 
 const NORM = join(import.meta.dirname, '..', '..', '..', 'data', 'normalized')
 const MANIFEST = join(NORM, 'manifest.json')
@@ -172,6 +173,11 @@ test('§4.3 的读路径逐条可查', { skip }, () => {
       '法拉格特级',
     )
     assert.equal(count(db, "SELECT COUNT(*) AS n FROM ship_source WHERE command = 'SHIPBLUEPRINT'"), 42)
+    // 舰种重名的消解结果落库成 `hull_type.label`（页面与客户端索引都只读这一列）：
+    // 21 个 type_name 只有 18 个不同，重名补站位名后整表标签唯一
+    assert.equal(get<{ label: string }>(db, 'SELECT label FROM hull_type WHERE type_id = 5').label, '战列')
+    assert.equal(get<{ label: string }>(db, 'SELECT label FROM hull_type WHERE type_id = 22').label, '风帆·潜艇编队')
+    assert.equal(count(db, 'SELECT COUNT(DISTINCT label) AS n FROM hull_type'), 21)
     // 筛选面板的基数：META 全部落 nationality 97，布里落 98
     assert.equal(count(db, 'SELECT COUNT(*) AS n FROM ship WHERE nationality = 97'), 59)
     assert.equal(count(db, 'SELECT COUNT(*) AS n FROM ship WHERE nationality = 98'), 3)
@@ -225,7 +231,7 @@ test('meta 里记了 schema 版本、来源 SHA 与逐表行数（不含时间�
     const rows = db.prepare('SELECT key, value FROM meta ORDER BY key').all() as Array<{ key: string; value: string }>
     const meta = new Map(rows.map((r) => [r.key, r.value]))
     db.close()
-    assert.equal(meta.get('schema_version'), '3')
+    assert.equal(meta.get('schema_version'), '4')
     assert.equal(meta.get('data_sha'), sha)
     assert.equal(meta.get('count:ship'), '859')
     assert.equal(meta.get('count:ship_stage_attr'), '41124')
@@ -239,5 +245,50 @@ test('meta 里记了 schema 版本、来源 SHA 与逐表行数（不含时间�
     assert.equal(meta.get('count:retrofit_node'), '1217')
     assert.equal(meta.get('count:orphan_skin'), '358')
     assert.ok(!rows.some((r) => /sync|time|date/i.test(r.key)), 'meta 里出现了时间类键，建库就不再字节可复现')
+  })
+})
+
+test('客户端筛选索引：条目与选项和库同代，两次导出逐字节相同', { skip }, () => {
+  inTemp((dbFile) => {
+    buildDatabase(NORM, dbFile, sha as string)
+    const a = join(dbFile, '..', 'ships-a.json')
+    const b = join(dbFile, '..', 'ships-b.json')
+    const r1 = buildClientIndex(dbFile, a)
+    const r2 = buildClientIndex(dbFile, b)
+    assert.equal(r1.ships, 859)
+    // 选项名单与静态分类页同一条规则（成员 > 0）：28 / 17 / 3 / 5 / 4
+    assert.deepEqual(r1.facets, { faction: 28, 'ship-type': 17, position: 3, rarity: 5, handbook: 4 })
+    assert.deepEqual(r2.facets, r1.facets)
+    assert.equal(sha256File(a), sha256File(b), '同一份库两次导出必须逐字节相同')
+
+    const idx = JSON.parse(readFileSync(a, 'utf8')) as {
+      schemaVersion: string
+      dataSha: string
+      ships: number
+      facets: Record<string, Array<{ s: string; l: string }>>
+      list: Array<Record<string, unknown> & { g: number }>
+    }
+    assert.equal(idx.dataSha, sha)
+    assert.equal(idx.schemaVersion, '4')
+    assert.equal(idx.list.length, 859)
+    assert.equal(new Set(idx.list.map((s) => s.g)).size, 859, 'group_type 不能重复或丢条目')
+    // 每艘船在每个维度上的取值都必须能在选项名单里找到，否则筛选面板筛不出它
+    const pairs: Array<[string, string]> = [
+      ['faction', 'f'],
+      ['ship-type', 't'],
+      ['position', 'p'],
+      ['handbook', 'h'],
+      ['rarity', 'r'],
+    ]
+    for (const [key, field] of pairs) {
+      const allowed = new Set((idx.facets[key] ?? []).map((o) => o.s))
+      for (const s of idx.list) {
+        const v = s[field]
+        if (v === null) continue
+        assert.ok(allowed.has(String(v)), `船 ${s.g} 的 ${key} 取值 ${String(v)} 不在选项名单里`)
+      }
+    }
+    // 索引里只有筛选要用的字段：文本类内容（技能描述、语音台词）不进这个文件
+    assert.deepEqual(Object.keys(idx.list[0] as object).sort(), ['e', 'f', 'g', 'h', 'k', 'n', 'p', 'r', 'rt', 't', 'x'])
   })
 })

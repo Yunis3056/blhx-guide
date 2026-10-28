@@ -92,8 +92,8 @@ function insertAll(db: DatabaseSync, d: Dataset): number {
   const insPosition = db.prepare('INSERT INTO team_position (team_type, slug, name, evidence) VALUES (?,?,?,?)')
   for (const p of d.positions) insPosition.run(p.teamType, p.slug, p.name, p.evidence)
 
-  const insHull = db.prepare('INSERT INTO hull_type (type_id, type_name, team_type) VALUES (?,?,?)')
-  for (const h of d.hulls) insHull.run(h.typeId, h.typeName, h.teamType)
+  const insHull = db.prepare('INSERT INTO hull_type (type_id, type_name, team_type, label) VALUES (?,?,?,?)')
+  for (const h of d.hulls) insHull.run(h.typeId, h.typeName, h.teamType, h.label)
 
   const retrofitSet = new Set(d.retrofits.map((r) => r.groupType))
   const classByGroup = new Map(

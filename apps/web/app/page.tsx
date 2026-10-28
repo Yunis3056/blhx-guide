@@ -64,7 +64,8 @@ export default function HomePage() {
 
       <h2>分类导航</h2>
       <p className="note">
-        每个取值一页，共 {pages} 张；页面名单由 <code>data/al.sqlite</code> 的取值查询现算，
+        <a href="/ship/">舰船图鉴列表页</a>（组合条件筛选，条件写进地址栏可分享）。以下每个取值一页，共 {pages} 张；
+        页面名单由 <code>data/al.sqlite</code> 的取值查询现算，
         所以「有这一页」与「库里这个值真有船」是同一件事。零成员的值不建页（实测阵营里有 1 个）。
       </p>
       {list.map((f) => (

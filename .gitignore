@@ -9,6 +9,9 @@ data/raw/
 # 构建期重建，不入库
 data/al.sqlite
 data/al.sqlite-*
+# 客户端筛选索引由 pipeline#client-index 从 al.sqlite 现算（§6.2 顺序第 3 步）；
+# 提交它等于允许「旧索引配新页面」这种CI 里查不出的状态
+apps/web/public/data/
 
 # LocalAdapter 输出，不入库（上云走 R2）
 data/images/

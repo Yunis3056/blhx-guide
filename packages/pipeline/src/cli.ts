@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TABLES, assertSpec, relPath, type TableKey } from './tables.ts'
 import { buildDatabase, readJsonl, FILES } from './store/build.ts'
+import { buildClientIndex } from './emit/client-index.ts'
 import type { ShipRecord, ShipSkinRecord } from './normalize/ship.ts'
 import { buildImages, unitsForShip, type Unit } from './images/pipeline.ts'
 import { enRepoId } from './images/en-repo.ts'
@@ -474,6 +475,18 @@ function cmdSelfcheck(): void {
   log(`PASS：${Object.keys(TABLES).length} 条表注册，路径无重复，阈值与实测状态一致`)
 }
 
+function cmdClientIndex(): void {
+  const dbPath = join(ROOT, 'data', 'al.sqlite')
+  const outFile = join(ROOT, 'apps', 'web', 'public', 'data', 'ships.index.json')
+  const r = buildClientIndex(dbPath, outFile)
+  log(`客户端索引 → ${outFile}`)
+  log(
+    `  ${r.ships} 艘 · ${(r.bytes / 1024).toFixed(1)} KB · 选项 ${Object.entries(r.facets)
+      .map(([k, v]) => `${k} ${v}`)
+      .join(' · ')}`,
+  )
+}
+
 const cmd = process.argv[2]
 switch (cmd) {
   case 'fetch':
@@ -491,10 +504,13 @@ switch (cmd) {
   case 'emit':
     cmdEmit()
     break
+  case 'client-index':
+    cmdClientIndex()
+    break
   case 'images':
     await cmdImages(process.argv.slice(2))
     break
   default:
-    log('用法: pipeline <--selfcheck|fetch|validate|normalize [--seq N]|emit|images [--limit N|--group G]>')
+    log('用法: pipeline <--selfcheck|fetch|validate|normalize [--seq N]|emit|client-index|images [--limit N|--group G]>')
     process.exitCode = 2
 }

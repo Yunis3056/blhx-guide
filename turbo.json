@@ -33,8 +33,18 @@
       ],
       "outputs": ["$TURBO_ROOT$/data/al.sqlite"]
     },
-    "web#build": {
+    "pipeline#client-index": {
       "dependsOn": ["pipeline#emit"],
+      "description": "§6.2 顺序第 3 步：建库之后、next build 之前把客户端筛选索引导到 apps/web/public/data/。它必须有自己的任务名，否则 web#build 只能靠「先跑过 emit 顺手生成」——那种隐式顺序在缓存命中时会读到上一代的 json",
+      "inputs": [
+        "$TURBO_ROOT$/data/al.sqlite",
+        "$TURBO_ROOT$/packages/pipeline/src/**",
+        "$TURBO_ROOT$/packages/pipeline/package.json"
+      ],
+      "outputs": ["$TURBO_ROOT$/apps/web/public/data/ships.index.json"]
+    },
+    "web#build": {
+      "dependsOn": ["pipeline#emit", "pipeline#client-index"],
       "inputs": [
         "$TURBO_ROOT$/data/normalized/**",
         "$TURBO_ROOT$/data/manual/**",

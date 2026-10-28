@@ -1072,7 +1072,7 @@ Pages 而非 Workers：A+B 档每日构建约 31 次 × 数分钟，Pages Free �
 | 路由 | 渲染 | 说明 |
 |---|---|---|
 | `/` | SSG | 当前版本、新船、新皮肤、热门攻略 |
-| `/ship` | SSG + CSR 筛选 | 全量交互筛选；query 变体 canonical 指向 `/ship` |
+| `/ship` | SSG + CSR 筛选（已建） | 服务端这份 HTML 给条目数与 57 张分类页链接；表格由客户端读 `/data/ships.index.json` 后填。条件写进 query（`?faction=royal-navy&type=5&retrofit=1`，可分享可后退），canonical 统一指 `/ship/`，query 变体不各自成页也不被收录 |
 | `/ship/compare` | CSR | 最多 4 艘 |
 | `/equipment` | SSG + CSR 筛选 | 用 `compare_group` 做同类对比 |
 | `/skill` | SSG + 搜索 | |
@@ -1110,7 +1110,7 @@ export function getSourcesForItem(itemId: number): ChapterSource[]
 
 所有 SQL 集中在 `lib/queries/`，页面不写 SQL。
 
-库结构在 `packages/pipeline/src/store/schema.ts`（`SCHEMA_VERSION = 3`，23 表 + `meta`，`data/al.sqlite` 12.05 MiB）。四条约束是实测出来的，不是设计偏好：
+库结构在 `packages/pipeline/src/store/schema.ts`（`SCHEMA_VERSION = 4`，23 表 + `meta`，`data/al.sqlite` 12.05 MiB；建库之后 `pipeline#client-index` 从这张库导出筛选索引，§4.3 末与 §6.2 顺序第 3 步）。四条约束是实测出来的，不是设计偏好：
 
 - 属性走窄表 `ship_stage_attr(group_type, stage, attr, base, growth, growth_extra)`，`attr` 取值即 `attr_def.name`。不用 3×12 列宽表：定义表多一项属性时宽表要改 DDL，窄表只多一行
 - 全部行在**单个事务**里插完，41,124 行属性逐条自动提交时 `emit` 超过两分钟没跑完就被杀；同一步骤里逐表核对「jsonl 行数 == 表行数」，末尾断言 `PRAGMA integrity_check = ok`
@@ -1139,17 +1139,17 @@ export function getSourcesForItem(itemId: number): ChapterSource[]
 
 **六维的六个位置不是属性顺序。** 照 `attribute_info_by_type` 的 id 1..6 贴标签会错四个，实测顺序是 **炮击 / 雷击 / 航空 / 机动 / 防空 / 耐久**（厌战 = 炮击 S、耐久 A、雷击与航空 E；卡辛 = 机动 B 最高、航空 E 最低）。定位方法：856 条可比船，取最高阶段行的 12 项属性与该船六位字母，逐位算 \|Spearman\| 取最大项，得 .86 / .95 / 1.00 / .87 / .72 / .82，六个最大项互不相同；第 4 位 dodge .87 与 speed .81 贴近，用 12 项属性的岭回归与控住对方的偏相关复核，是 dodge **.514** 对 speed **.210**。构建期不复算回归，但每次 normalize 都重跑逐位取最大项这一步并断言三件事：可比样本 ≥ 500、每位最大相关 ≥ 0.6、六位互不相同——上游改了数组顺序或换了口径，这里就停，不会静默地把雷达六个轴贴错名。
 
-客户端 JSON：
+客户端 JSON（由 `pipeline#client-index` 在建库之后、`next build` 之前导出到 `apps/web/public/data/`，§6.2 顺序第 3 步）：
 
 ```
-/public/data/ships.index.json      ~300KB gzip   列表页筛选
-/public/data/equips.index.json     ~320KB gzip
-/public/data/drop.index.json       ~500KB gzip   材料反查（分片）
-/public/data/chapters.index.json   ~200KB gzip
-/public/data/search.index.json     ~260KB        主搜索索引
+/public/data/ships.index.json      已建：859 条 · 115,349 B · gzip 22,473 B（估算的 ~300KB 被推翻）
+/public/data/equips.index.json     ~320KB gzip（阶段 3，未建）
+/public/data/drop.index.json       ~500KB gzip   材料反查（分片，未建）
+/public/data/chapters.index.json   ~200KB gzip（未建）
+/public/data/search.index.json     ~260KB   主搜索索引（未建，需 aliases + 多音字表）
 ```
 
-单文件 gzip 超 500KB 即分片按 chunk 懒加载。
+`ships.index.json` 的口径：**每艘一行，只放筛选与列表要用的字段**（`group_type` / 中文名 / 英文名 / 图鉴编号 / 五个维度的 slug / 皮肤数 / 可改造），键映射写进文件 itself，文本类内容（技能描述、语音台词、改造节点）一概不进——进了就是让每个访问者先下载一遍全站文本。文件里带 `dataSha` 与 `schemaVersion`，路由守卫核它是否与库同代、条目数是否等于图鉴数（缓存里索引比页面新或旧都不会有别的报错）。选项名单也在文件里（`HAVING n > 0` 那条规则与静态分类页同一条：28 / 17 / 3 / 5 / 4），面板不自带一套枚举。
 
 ### 4.4 搜索
 
@@ -1184,29 +1184,29 @@ export function getSourcesForItem(itemId: number): ChapterSource[]
 | LCP | < 3.5s（国内 4G） | Cloudflare 免费版无大陆节点，预算相应放宽 |
 | Lighthouse | SEO ≥ 95，A11y ≥ 90，Perf ≥ 85 | |
 
-**产物文件数预算**：一条路由在 `output: 'export'` + App Router 下产出**两个文件**，不是一个——`index.html` 与 RSC 载荷 `index.txt`。917 条路由（舰船 859 + 分类页 57 + 首页 1）实测 **1,855 个文件** = 917 × 2 = 1,834 个路由文件，加 21 个非路由文件（404 族的 `404.html` 与 `404/index.html` 两个，它没有 RSC 载荷；18 个 `.js` + 1 个 `.css` 共享 chunk）。所以 18,000 这条守卫线等价于**约 8,900 条路由**，不是 18,000 条。
+**产物文件数预算**：一条路由在 `output: 'export'` + App Router 下产出**两个文件**，不是一个——`index.html` 与 RSC 载荷 `index.txt`。918 条路由（舰船 859 + 分类页 57 + 首页 + `/ship` 列表页）× 2 = 1,836，加 23 个非路由文件（404 族的 `404.html` 与 `404/index.html` 两个 HTML，它没有 RSC 载荷；19 个 `.js` + 1 个 `.css` 共享 chunk；1 个 `data/ships.index.json`）= **1,859 个文件**。所以 18,000 这条守卫线等价于**约 8,900 条路由**，不是 18,000 条。
 
 | 项 | 路由数 | 文件数（×2） |
 |---|---|---|
 | 舰船（已实测） | 859 | 1,718 |
 | SEO 索引页 = 分类页（已实测，单维取值全建） | 57 | 114 |
-| 首页（已实测） | 1 | 2 |
+| 首页 + `/ship` 列表页（已实测） | 2 | 4 |
 | 装备 | 909 | ~1,820 |
 | 关卡 | 981 | ~1,960 |
 | 多维组合索引页（满足阈值的阵营 × 舰种） | ~60 | ~120 |
-| 攻略 50 + 更新页 + 功能页 + 杂项 | ~80 | ~160 |
+| 攻略 50 + 其他功能页 + 杂项 | ~80 | ~160 |
 | 技能页（若独立成页） | 3,030 | ~6,060 |
 | **合计（不含技能页）** | ~2,970 | **~5,960** |
 | **合计（含技能页）** | ~6,000 | **~12,020** |
 
-两种都在 18,000 守卫线内，但含技能页的口径只剩 1.5× 余量——§7 阶段 3 那句「实测构建时长后再定」因此有了第二个理由：不只是时长，还有文件数。共享 chunk 实测只有 **18 个 `.js` + 1 个 `.css`**，不是原先估的 ~300，且每个页面只引用其中 5 个（舰船页与分类页引用的完全同一组）、这组数字与页面数量无关，加页数不会推高首屏 JS。图片零入产物。
+两种都在 18,000 守卫线内，但含技能页的口径只剩 1.5× 余量——§7 阶段 3 那句「实测构建时长后再定」因此有了第二个理由：不只是时长，还有文件数。共享 chunk 实测 **19 个 `.js` + 1 个 `.css`**，不是原先估的 ~300，且每个页面只引用其中 4–5 个（详情页 4 个、`/ship` 列表页多一个筛选块共 5 个）、这组数字与页面数量无关，加页数不会推高首屏 JS。图片零入产物。
 
-**917 页全量预渲染实测**（D-verified，本地 Windows / Node 24 / Next 15.5.28）：
+**918 条路由全量预渲染实测**（D-verified，本地 Windows / Node 24 / Next 15.5.28）：
 
 | 指标 | 实测 | 预算 | 判定 |
 |---|---|---|---|
-| 产物文件数 | 1,855（917 路由 ×2 + 404 的两个 HTML + 19 个共享 chunk） | < 18,000 | 余量 9.7× |
-| 产物总体积 | 实际字节 94.83 MiB（HTML 60.6 MiB + RSC 33.3 MiB + JS/CSS 0.8 MiB）；`du -sh` 报的更大值是块对齐值 | — | RSC 载荷占实际字节 35% |
+| 产物文件数 | 1,859（`.html` 920 · `.txt` 918 · `.js` 19 · `.css` 1 · `.json` 1） | < 18,000 | 余量 9.7× |
+| 产物总体积 | 实际字节 94.99 MiB（HTML 60.7 + RSC 33.4 + JS/CSS 0.8 + 客户端索引 0.11）；`du -sh` 报的更大值是块对齐值 | — | RSC 载荷占实际字节 35% |
 | 最大单文件 | 382,369 B（分类页 `category/handbook/regular/index.html`，667 行表格）；最大 `.js` 是 219,010 B（`framework-*.js`） | < 25 MiB | 两台机器同一个文件同高，余量四个数量级 |
 | 舰船页 HTML | 45,304 – 137,239 B（中位 68,909） | < 60KB gzip | 最大一页 gzip **29,503 B**，余量 2.0× |
 | 分类页 HTML | 9,183 – 382,369 B（中位 22,117；667 行的「常规舰船」最大） | < 60KB gzip | 最大一页 gzip **29,508 B**——列表页行数 5× 于舰船页，gzip 后与最重的舰船页同高，因为表格里全是重复的标签与结构 |
@@ -1216,16 +1216,16 @@ export function getSourcesForItem(itemId: number): ChapterSource[]
 | 首屏 JS | 4 个 chunk / **100.3 KiB gzip**（`polyfills-*.js` 带 `noModule`，现代浏览器不取） | < 170KB gzip | 通过，余量 41%；与 Next 自己报的 First Load JS 102 kB 对上 |
 | 首屏 CSS | 1,389 B（gzip 683） | — | 无自定义字体 |
 
-**首屏 JS 的口径要用对**：把 HTML 里所有 `<script src>` 加起来是 139.0 KiB gzip，其中 39.6 KiB 是 `polyfills-*.js`——它带 `noModule`，只给不支持 ES module 的浏览器，算进首屏就凭空多出一倍。**产物体积与首屏体积是两件事**：RSC 载荷 33.3 MiB 全在产物里，但一次页面访问取的是 HTML + 4 个 chunk。**构建时长要按「谁在计」分开记**（同一台 Windows 机、同一份数据、917 条路由）：
+**首屏 JS 的口径要用对**：把 HTML 里所有 `<script src>` 加起来是 139.0 KiB gzip，其中 39.6 KiB 是 `polyfills-*.js`——它带 `noModule`，只给不支持 ES module 的浏览器，算进首屏就凭空多出一倍。**产物体积与首屏体积是两件事**：RSC 载荷 33.4 MiB 全在产物里，但一次页面访问取的是 HTML + 4 个 chunk（`/ship` 列表页是 5 个 / 102.6 KiB gzip）。**构建时长要按「谁在计」分开记**（同一台 Windows 机、同一份数据、918 条路由）：
 
 | 口径 | 秒 | 说明 |
 |---|---|---|
-| `next build` 直接跑（不经 turbo） | **16.5** | 含 917 页生成与导出；`pipeline#emit` 另加约 1 秒 |
-| `turbo run build --force` 任务自报 | **18.2** | turbo 的 `Time:` 只算任务 |
-| `turbo run build --force` 墙钟 | **594** | 差值 576 秒全部落在任务报时之后 |
-| `turbo run build`（指纹未变，重放缓存） | 29.9 | 代价只剩产物回写 |
+| `next build` 直接跑（不经 turbo） | **19.0** | 含 918 页生成与导出；建库与导索引另加约 2 秒 |
+| `turbo run build --force` 任务自报 | **45.8** | 四个任务：selfcheck + emit + client-index + web#build；turbo 的 `Time:` 只算任务 |
+| `turbo run build --force` 墙钟 | **443** | 差值 397 秒全部落在任务报时之后 |
+| `turbo run build`（指纹未变，重放缓存） | 3.9 | 代价只剩产物回写 |
 
-那 576 秒是 turbo 归档 `outputs = out/**` 的 1,855 个小文件：同一台机器上只归档 1 个文件的 `pipeline#emit`，墙钟比任务自报只多 0.3 秒。**所以本地墙钟不是构建成本**，上线看的数只有 CI 的 `pnpm build`（Linux 冷构建 17 秒，见 §6.7）；本地的高墙钟只在指纹变化那一次付，重放是 30 秒。产物文件数本地 1,855、CI 1,853，差值全在 `.js`（本地 18 / CI 16），HTML 与 RSC 载荷两边**数量逐个相等**（919 个 `.html` / 917 个 `.txt`；尺寸未逐台比对，线上一致性另有 §6.7 的「线上取回与上传字节等长」这条）。逐文件名比对出来的差异只有两类：`718.*.js` 与 `931.*.js` 两个 chunk 只在本地出现（这就是 2 个文件之差），另有 7 个同名 chunk（`webpack` / `main` / `main-app` / `layout` / `_app` / `_error` / `_not-found` 的 page）在两台机器上内容哈希不同；`framework`、`polyfills`、`341`、`740c43c4` 与 `app/page-*` 两边逐字节同名。本地删净 `.next`、`out/` 与 tsbuildinfo 冷构建仍是 18 个——不是缓存残留，是构建机切包差异。预算守卫因此把非路由文件逐个列出，让这类差值停留在「哪两个 chunk」而不是「总数对不上」。
+那 397 秒是 turbo 归档 `outputs = out/**` 的 1,859 个小文件：同一台机器上只归档 1 个文件的 `pipeline#emit`，墙钟比任务自报只多 0.3 秒。**所以本地墙钟不是构建成本**，上线看的数只有 CI 的 `pnpm build`（Linux 冷构建 17 秒，见 §6.7）；本地的高墙钟只在指纹变化那一次付，重放是 3.9 秒。产物文件数本地 1,859、CI 1,853，差值全在 `.js`（本地 19 / CI 16），HTML 与 RSC 载荷两边**数量逐个相等**（920 个 `.html` / 918 个 `.txt`；尺寸未逐台比对，线上一致性另有 §6.7 的「线上取回与上传字节等长」这条）。逐文件名比对的差异只有两类：`718.*.js` 与 `931.*.js` 只在本地出现，另有 7 个同名 chunk（`webpack` / `main` / `main-app` / `layout` / `_app` / `_error` / `_not-found` 的 page）在两台机器上内容哈希不同；`framework`、`polyfills`、`341`、`740c43c4` 两边逐字节同名。本地删净 `.next`、`out/` 与 tsbuildinfo 冷构建，文件数仍是 1,859（`.js` 仍是 19 个）——不是缓存残留，是构建机切包差异。预算守卫因此把非路由文件逐个列出，让这类差值停留在「哪两个 chunk」而不是「总数对不上」。
 
 **国内体验措施**：
 
@@ -1270,7 +1270,7 @@ export async function generateStaticParams() {
 
 `dynamicParams` 不关时，`output: 'export'` 下访问任何不在 `generateStaticParams` 里的路径都会拿到 404 页——这本身是期望行为，但**必须在 CI 里逐条断言每个路由都有 HTML**，否则漏一条路由构建照样成功。
 
-实现是 `scripts/check-routes.mjs`：名单只来自 `data/al.sqlite`——舰船页取 `ship` 表，分类页取那五条「维度 × 成员数 > 0」的查询，而 `generateStaticParams` 读的正是同几张表，于是「库里有这条船 / 这个分类值真有船」与「线上有这一页」被强制成同一件事。**只比总数不够**：漏一页同时多一页（旧代产物残留）时总数不变，所以两头都查——逐条 URL 验 `out/<路径>/index.html` 存在，再反向遍历产物目录找出库里没有的页。按目录名字符串比对而不是转数字，否则一个非数字的残留目录在报错里只会显示成 `NaN`，抓到了故障却读不出是什么。守卫还加一条**分区断言**：五个分类维度各自的成员数合计必须等于图鉴总数，有船落在所有分类页之外就是导航漏船，而页面数与文件数都完全正常，只有这条查得出来。`--urls` 打印全量名单、`--sample` 打印按序抽的 7 条（首页 + 舰船页三个位置 + 分类页三个位置），CI 的线上自检因此与预渲染名单共用同一份 SQL。守卫还有一条**死链检查**：遍历产物每个 HTML，抽出 `href="/…"` 的站内链接逐个验目标文件存在——存在性检查只看「名单里的 URL 有没有对应文件」，看不见页面自己写错的链接。四类故障都用真产物反向验过会红：临时挪开一页、造一个库里没有的目录、把一艘船的 `nationality` 改成库里没有的值（分区断言报「成员合计 858 ≠ 图鉴 859」）、把页面上一个 href 改成不存在的分类（报「死链 `ship/20502/index.html → /category/handbook/regular-typo/`」）。
+实现是 `scripts/check-routes.mjs`：名单只来自 `data/al.sqlite`——舰船页取 `ship` 表，分类页取那五条「维度 × 成员数 > 0」的查询，而 `generateStaticParams` 读的正是同几张表，于是「库里有这条船 / 这个分类值真有船」与「线上有这一页」被强制成同一件事。**只比总数不够**：漏一页同时多一页（旧代产物残留）时总数不变，所以两头都查——逐条 URL 验 `out/<路径>/index.html` 存在，再反向遍历产物目录找出库里没有的页。按目录名字符串比对而不是转数字，否则一个非数字的残留目录在报错里只会显示成 `NaN`，抓到了故障却读不出是什么。守卫还加一条**分区断言**：五个分类维度各自的成员数合计必须等于图鉴总数，有船落在所有分类页之外就是导航漏船，而页面数与文件数都完全正常，只有这条查得出来。`--urls` 打印全量名单、`--sample` 打印线上自检要抽的 9 条（首页、列表页、舰船页三个位置、分类页三个位置、筛选索引文件），CI 的线上自检因此与预渲染名单共用同一份 SQL。守卫还有一条**死链检查**：遍历产物每个 HTML，抽出 `href="/…"` 的站内链接逐个验目标文件存在——存在性检查只看「名单里的 URL 有没有对应文件」，看不见页面自己写错的链接。客户端索引另核两件事：`out/data/ships.index.json` 必须存在（它由 `pipeline#client-index` 生成，漏跑就是一片空白列表而 HTML 全绿），且它的 `dataSha` 与条目数必须与库一致（缓存里索引比页面新或旧，除此之外没有别的地方会报）。四类故障都用真产物反向验过会红：临时挪开一页、造一个库里没有的目录、把一艘船的 `nationality` 改成库里没有的值（分区断言报「成员合计 858 ≠ 图鉴 859」）、把页面上一个 href 改成不存在的分类（报「死链 `ship/20502/index.html → /category/handbook/regular-typo/`」）。
 
 **路由目录不能叫 `index`**：实测 `output:'export'` + `trailingSlash:true` 下，`app/index/[facet]/[slug]` 落成 `out/index/index/faction/x/index.html`——比 URL 多一层，页面里写的 `/index/faction/x/` 在 Pages 上是 404，而构建、路由守卫、直传全都绿。改成 `category` 后落盘与链接一致。这条是路由名级别的坑，只在真机导出目录里看得见。
 
@@ -1334,8 +1334,9 @@ Output directory  apps/web/out
 | 首页 First Load JS | 102 kB（`/_not-found` 103 kB） |
 | 舰船详情页 HTML | 83,521 B（厌战：12 张属性图 + 六维 + 装备位表 + 技能 + 5 个皮肤语音折叠块 + 3 张表 + 分类链接 + 页脚来源），gzip 18,198 B |
 | 分类页 HTML | 74,648 B（皇家阵营页，120 行表格），gzip 7,609 B——同维度的行结构高度重复，压得比舰船页更狠 |
+| `/ship` 列表页 HTML | 21,568 B，gzip 4,710 B（服务端这份只有条目数 + 57 条分类页链接 + 筛选容器；表格由客户端读索引后填，所以 HTML 不随船数长） |
 | 每条成长线的顶点数 | 2 个端点。按 1–100 逐点画线时同一页是 **298 kB**，859 页即 250MB+；公式对等级线性，端点即精确 |
-| 产物文件数（917 条路由） | 本地 1,855，明细与两条口径见 §4.5；CI 的数由同一条预算守卫打印（构建机 chunk 切分不同） |
+| 产物文件数（918 条路由） | 本地 1,859，明细与两条口径见 §4.5；CI 的数由同一条预算守卫打印（构建机 chunk 切分不同） |
 | 未预渲染路径 | `/ship/99999/` → 404，与 `dynamicParams = false` 一致；线上同样返回 404 |
 | §4.6 的 ESLint 守卫 | 反证过：塞进 `export const runtime = 'edge'` 与 `cookies()` 各报一条错，而 `export const dynamicParams = false` 不被误杀 |
 
@@ -1808,7 +1809,7 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 | 1.5 | `attr-map.ts` 由 `attribute_info_by_type` 生成 + 与 `enemy_data_statistics` 键集交叉断言 | 属性定义落地 |
 | 1.6 | `data/manual/factions.json`（29 条，`nationality → wordKey → slug`）与 `data/manual/rarity.json`（两段声明）；显示名与标签构建期从 gametip 读回并逐条比对 | 阵营覆盖 + 稀有度取值域两侧对齐 + 船名占位全解析 |
 | 1.7 | normalize 三层 + 改造 + 舰队科技（`ship` / `ship_stage` / `ship_skin` / `ship_retrofit` / `fleet_tech`）+ 枚举表 + `manifest.json`，全部 join 断言内置 | 实测 859 / **3,427**（表内阶段行 3,429，skin 900424 的 2 行属于 352 个孤儿 group 之一，进隔离清单不入库）/ 2,730 / 106 / (4+36+726)，产物 226.0KB gz，隔离清单 529 条 |
-| 1.8 | emit JSONL → 建 SQLite（23 表、外键常开、逐表行数与 jsonl 对账、`PRAGMA integrity_check`） | `data/al.sqlite` 12.05 MiB（schema_version 3）可查：ship 859 · ship_stage 3,427 · ship_stage_attr 41,124 · ship_stage_slot 17,135 · ship_skill 9,239 · ship_voice 43,495 · ship_skin 2,730 · orphan_skin 358 · ship_source 1,432 · retrofit_node 1,217 · fleet_tech_ship 726 · hexagon_axis 6 · equip_kind 19 · handbook_kind 4 · team_position 3 · faction 29 · hull_type 21 · rarity 5；两次建库逐字节相同；建库 < 1s；`$TURBO_ROOT$` 输入指纹按 §6.5 实测表逐条通过 |
+| 1.8 | emit JSONL → 建 SQLite（23 表、外键常开、逐表行数与 jsonl 对账、`PRAGMA integrity_check`）+ 导出客户端筛选索引 | `data/al.sqlite` 12.05 MiB（schema_version 4）可查：ship 859 · ship_stage 3,427 · ship_stage_attr 41,124 · ship_stage_slot 17,135 · ship_skill 9,239 · ship_voice 43,495 · ship_skin 2,730 · orphan_skin 358 · ship_source 1,432 · retrofit_node 1,217 · fleet_tech_ship 726 · hexagon_axis 6 · equip_kind 19 · handbook_kind 4 · team_position 3 · faction 29 · hull_type 21（含消解后的唯一 `label`）· rarity 5；两次建库逐字节相同；建库 < 1s；`ships.index.json` 859 条 / gzip 22,473 B，两次导出逐字节相同；`$TURBO_ROOT$` 输入指纹按 §6.5 实测表逐条通过 |
 | 1.9 | 图片：1 艘船的 icon + 默认立绘 + 1 张换装，**skinId 精确 join** → sharp → LocalAdapter（**仅本地验证，不上线**） | 实测 `--limit=1`（group 10000）出 7 个产物、`--group=20502` 再 7 个，共 14 文件 992KB；全部 EN 命中、零降级；第二次跑同一艘船下载 0 张跳过 7 项 |
 | 1.10 | Next.js 脚手架 + `/ship/[groupType]`（**仅 1 艘**）+ §4.6 全部配置项 | 实测：`out/` 24 文件 953KB，详情页 HTML 47.7KB，首页 First Load JS 106KB；`/ship/99999/` 走 404；页面渲染 12 项属性表 + 12 张 1–100 端点图 + 5 个皮肤（含 CV）+ 12 条改造节点（中文 descrip，机器格式 effect 不入库展示）+ 舰级与科技点 + 3 条获取方式；构建期与浏览器双端零 console 错误 |
 | 1.11 | 部署 Pages（**无图版本**，立绘位置渲染占位块） | 实测：`wrangler pages project create blhx-guide` + `pages deploy apps/web/out` 直传 24 文件，3.46s 上传完成。线上 `https://blhx-guide.pages.dev/` 与 `/ship/20502/` 均 200，`/ship/99999/` 404；线上 HTML 里 `undefined/`、`/_next/image`、`<img>` 全部 0 命中 |
@@ -1842,10 +1843,14 @@ CI 侧的首个全量 run（#3，`ef6301e`，通道 A）全绿：`产物文件�
 
 线上已按同一份名单核过（run `40629682597`，部署 `0c7ad40f.blhx-guide.pages.dev`）：`--sample` 抽的 7 条 URL 全 200（`/` + 舰船页三个位置 + 分类页三个位置），未渲染路径 404；抓线上 HTML 回读，`/category/handbook/collab/` 的 H1 是「联动舰船」且含 91 条舰船链与证据段，`/category/position/submarine/` 47 条，`/category/ship-type/22/` 的 H1 是「风帆·潜艇编队」——同名舰种的消歧在生产端也成立。
 
+**2.3b `/ship` 列表页与客户端筛选（已跑通，D-verified 2026-10-28）**：§6.2 顺序第 3 步从此有了自己的任务 `pipeline#client-index`（读 `data/al.sqlite` → 写 `apps/web/public/data/ships.index.json`，859 条 / 115,349 B / gzip 22,473 B，原先估的 ~300KB gzip 被推翻），`web#build` 显式 dependsOn 它——挂在「跑过 emit 应该顺手生成了」这种隐式顺序上，缓存命中时就会拿上一代的索引配这一代的页面，而且没有任何一处会报错。索引口径与用途见 §4.3 的客户端 JSON 一节。**顺手把舰种重名消解从展示层挪进库里**：`hull_type` 加 `label` 列（`schema_version` 4），值是 `type_name` 重名时补站位名（导驱 20 前排 / 21 后排，风帆 22 潜艇 / 23 前排 / 24 后排），标签整表唯一由 normalize 断言；分类页、详情页与客户端索引读同一列，之前 `facets.ts` 里那份消解函数与它并行存在的两份实现合成一份。列表页服务端只给条目数与 57 张分类页链接，表格由客户端读索引后填：条件写进 query（用 `replaceState`，筛一次加一条历史记录会淹掉「后退」），首次载入从 `location.search` 读回，canonical 统一指 `/ship/`；命中超过 400 行只列前 400 行并在页上说明。`/ship` 的首屏 JS 是 5 个 chunk / 102.6 KiB gzip（详情页是 4 个 / 100.3 KiB，多的那一个就是这个筛选块）。守卫新增两条：`out/data/ships.index.json` 必须存在（它由 `pipeline#client-index` 生成，漏跑就是一片空白列表而 HTML 全绿），且它的 `dataSha` 与条目数必须与库一致（缓存里索引比页面新或旧，除此之外没有别的地方会报）。两条都反向验过会红（改脏 `dataSha` 报「筛选面板会给旧数据」，删文件报「client-index 没跑或在 next build 之后」）。
+
+筛选行为在浏览器里实跑过（本地静态服务器起 `out/`，因为这类页面只在有 HTTP Origin 时才走 query 读写）：无条件命中 859 / 859 并只渲染前 400 行；选「皇家」得 120、再加「超稀有」得 32，两个数与库里 `nationality=2 [AND] rarity=5` 的 SQL 逐个一致；排序切到皮肤数后首行是 9 皮肤的船；`?q=warspite` 只回 1 行且链到 `/ship/20502/`；`?faction=bilibili&rarity=6` 是 0 命中、表体空而表头与说明仍在；直接加载 `?faction=royal-navy&rarity=5&sort=skins` 这个分享链接，三个控件与排序都按 URL 回读出来了。整个过程 console 无 error 无 warning。
+
 - 扩至 859 条目 / 3,427 阶段行入库（表内阶段行 3,429，覆盖 860 个 skin_id，其中 2 行属孤儿 group 进隔离清单）/ 2,730 皮肤；落实正向枚举过滤（阶段 1 已跑通，见 §7 1.7 实测行）
 - 详情页完整：六维雷达、**1–100 级**属性曲线（含 `attrs_growth_extra`，见 §3.7）、突破表、装备位与效率、**技能名与描述文本**（buff 机制与触发数值不在范围，§8.2）、皮肤画廊、改造分支、舰队科技点、**语音文本**（B 档 `ship_skin_words`）、获取方式（含跳转文案）
 - 隔离清单落地（同 `skin_id` 多船名的处理）
-- `/ship` 全量交互筛选（阵营 / 舰种 / 站位 / 稀有度 / 图鉴分类 / 获取方式 / 排序），URL 可分享，query 变体 canonical
+- `/ship` 列表页与交互筛选（已建）：阵营 / 舰种 / 站位 / 稀有度 / 图鉴分类 + 船名包含 + 只看可改造 + 四种排序，条件写进 query 可分享，canonical 指 `/ship/`。**获取方式不在筛选维度里**（6 个命令枚举没有中文文本源，见 §5），详情页显示的是船自己带的来源文本
 - 57 张单维分类页已建（§5）；跨维组合页按 ≥5 阈值后建
 - 联动船 91 艘的分类页已建，其所属活动以阵营名呈现（实测 15 个联动阵营，如 hololive / 闪乱神乐 / SSSS）；**「版权到期后不可获取」状态没有数据源**，页面上不标——`ship_source` 只给获取命令与文本，不含可获得性（§12 待核）
 - **META（`handbook_type=3`，59）与科研船（`handbook_type=2`，42）各有独立分类页**；改造是舰船详情页上的分支区块（来自 `trans_*`），**不是图鉴分类维度**（§3.5）
@@ -1931,14 +1936,18 @@ Pages 侧另用「回滚到历史部署」作为秒级预案。两者是不同�
       // 产物落在输入集合之外：建库任务不读自己写的文件，指纹不会被自引用搅浑
       "outputs": ["$TURBO_ROOT$/data/al.sqlite"]
     },
+    "pipeline#client-index": {
+      "dependsOn": ["pipeline#emit"],          // ← 顺序第 3 步：建库之后、next build 之前
+      "inputs": ["$TURBO_ROOT$/data/al.sqlite", "$TURBO_ROOT$/packages/pipeline/src/**", "$TURBO_ROOT$/packages/pipeline/package.json"],
+      "outputs": ["$TURBO_ROOT$/apps/web/public/data/ships.index.json"]
+    },
     "web#build": {
-      "dependsOn": ["pipeline#emit"],          // ← 缺这行就会与 emit 并行，读到旧 public/data
+      "dependsOn": ["pipeline#emit", "pipeline#client-index"],   // ← 缺这两行就会并行，读到旧 public/data
       "inputs": [
         "$TURBO_ROOT$/data/al.sqlite",         // 实际读的库，不声明就不进指纹
         "$TURBO_ROOT$/apps/web/public/data/**",// 客户端 JSON 与搜索索引，同样是传递产物
         "app/**", "components/**", "content/**", "lib/**",
-        "next.config.ts", "tsconfig.json", "package.json",
-        "$TURBO_ROOT$/packages/ui/**"          // 共享组件包
+        "next.config.ts", "tsconfig.json", "package.json"
       ],
       "outputs": ["out/**"],                   // 包内相对路径，不写 apps/web/ 前缀
       "env": ["NEXT_PUBLIC_IMG_BASE", "IMAGE_ADAPTER"]   // 进 cache key，换域名/换模式不复用旧产物

@@ -12,8 +12,9 @@ import { num, str, type Row } from '../db'
  * 不是游戏枚举，所以写在这里；维度**取值**的显示名一律从库里读回，一个都不硬编码。
  *
  * 三条实测出来的坑，写死在这里而不是等页面出错：
- * - **舰种名不唯一**：21 个舰种只有 18 个不同显示名（导驱 20/21、风帆 22/23/24 同名），
- *   站位才把它们分开，所以 slug 用 `type_id`，同名时标签里补站位名。
+ * - **舰种名不唯一**：21 个舰种只有 18 个不同 `type_name`（导驱 20/21、风帆 22/23/24 同名），
+ *   站位才把它们分开。消解在构建期做完并写进 `hull_type.label`（`normalize/enums.ts`），
+ *   这里与客户端筛选索引读的都是那一列；slug 始终用 `type_id`，不用名字。
  * - **阵营有零成员的值**：鸢尾教国（nationality 10）在 `faction` 表里登记着，实测 0 艘船。
  *   给空页建静态页是负资产，所以取值查询带 `HAVING n > 0`；这条由 `assertFacetsSane` 钉住，
  *   免得上游哪天给了名字却给了 0 成员时静默少一页。
@@ -64,24 +65,12 @@ export function facetDimensionLabel(key: string): string {
   return d.label
 }
 
-/** 21 个舰种 × 各自站位，同名判定要看到整表，不能只看有船的那 17 个 */
-function hullRowsWithPosition(db: DatabaseSync): Array<{ type_id: number; type_name: string; position: string }> {
+/** 21 个舰种只有 18 个不同 type_name，重名靠站位分开——消解在构建期做完并落进 `hull_type.label`，
+ *  页面与客户端索引读同一列，见 packages/pipeline/src/normalize/enums.ts */
+function hullRows(db: DatabaseSync): Array<{ type_id: number; label: string }> {
   return (
-    db
-      .prepare(
-        `SELECT h.type_id, h.type_name, p.name AS position
-         FROM hull_type h JOIN team_position p ON p.team_type = h.team_type
-         ORDER BY h.type_id`,
-      )
-      .all() as Row[]
-  ).map((r) => ({ type_id: num(r, 'type_id'), type_name: str(r, 'type_name'), position: str(r, 'position') }))
-}
-
-/** 舰种同名时补站位名；判定用整表的重名情况，所以任何一代数据里同一舰种的标签都一致 */
-function disambiguate(rows: Array<{ type_id: number; type_name: string; position: string }>): string[] {
-  const byName = new Map<string, number>()
-  for (const r of rows) byName.set(r.type_name, (byName.get(r.type_name) ?? 0) + 1)
-  return rows.map((r) => ((byName.get(r.type_name) ?? 1) > 1 ? `${r.type_name}·${r.position}` : r.type_name))
+    db.prepare('SELECT type_id, label FROM hull_type ORDER BY type_id').all() as Row[]
+  ).map((r) => ({ type_id: num(r, 'type_id'), label: str(r, 'label') }))
 }
 
 const valueLoaders: Record<string, (db: DatabaseSync) => FacetValue[]> = {
@@ -96,25 +85,17 @@ const valueLoaders: Record<string, (db: DatabaseSync) => FacetValue[]> = {
         .all() as Row[]
     ).map((r) => ({ slug: str(r, 'slug'), label: str(r, 'label'), count: num(r, 'n'), evidence: null })),
   'ship-type': (db) => {
-    const rows = db
+    const counts = db
       .prepare(
         `SELECT h.type_id, COUNT(s.group_type) AS n
          FROM hull_type h JOIN ship s ON s.ship_type = h.type_id
          GROUP BY h.type_id ORDER BY n DESC, h.type_id`,
       )
       .all() as Row[]
-    const all = hullRowsWithPosition(db)
-    const labels = disambiguate(all)
-    return rows.map((r) => {
+    const labels = new Map(hullRows(db).map((r) => [r.type_id, r.label]))
+    return counts.map((r) => {
       const typeId = num(r, 'type_id')
-      const i = all.findIndex((x) => x.type_id === typeId)
-      const head = all[i]
-      return {
-        slug: String(typeId),
-        label: (labels[i] ?? head?.type_name ?? String(typeId)),
-        count: num(r, 'n'),
-        evidence: null,
-      }
+      return { slug: String(typeId), label: labels.get(typeId) ?? String(typeId), count: num(r, 'n'), evidence: null }
     })
   },
   position: (db) =>
@@ -157,7 +138,7 @@ const memberWhere: Record<string, { sql: string; arg: (slug: string) => string |
   handbook: { sql: 'k.slug = ?', arg: (s) => s },
 }
 
-const MEMBER_BASE = `SELECT s.group_type, s.name, f.name AS faction_name, h.type_name,
+const MEMBER_BASE = `SELECT s.group_type, s.name, f.name AS faction_name, h.label AS type_name,
        p.name AS position_name, k.name AS handbook_name, r.label AS rarity_label
   FROM ship s
   JOIN faction f ON f.nationality = s.nationality
@@ -235,12 +216,9 @@ export function shipFacetLinks(db: DatabaseSync, groupType: number): ShipFacetLi
   return out
 }
 
-/** 舰种标签与分类页取值走同一个消解函数，两边不会写出两种名字 */
+/** 舰种标签就是库里那一列，页面不再自己拼 */
 export function labelForShipType(db: DatabaseSync, typeId: number): string | null {
-  const withPos = hullRowsWithPosition(db)
-  const labels = disambiguate(withPos)
-  const i = withPos.findIndex((r) => r.type_id === typeId)
-  return i < 0 ? null : (labels[i] ?? null)
+  return hullRows(db).find((r) => r.type_id === typeId)?.label ?? null
 }
 
 /**

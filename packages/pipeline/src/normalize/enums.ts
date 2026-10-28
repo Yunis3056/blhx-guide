@@ -17,7 +17,7 @@ import type { FactionEntry } from '../display/factions.ts'
 export type EnumRow =
   | { kind: 'attr'; idx: number; attrId: number; name: string; label: string }
   | { kind: 'rarity'; value: number; label: string }
-  | { kind: 'hull'; typeId: number; typeName: string; teamType: string }
+  | { kind: 'hull'; typeId: number; typeName: string; teamType: string; label: string }
   | { kind: 'faction'; nationality: number; slug: string; name: string; source: string }
   | { kind: 'equipKind'; typeId: number; typeName: string; typeName2: string }
   | { kind: 'handbook'; handbookType: number; slug: string; name: string; evidence: string }
@@ -43,9 +43,34 @@ export function buildEnumRows(
     label: a.label,
   }))
   const rarity: EnumRow[] = rarities.map((r) => ({ kind: 'rarity', value: r.value, label: r.label }))
-  const hull: EnumRow[] = [...hulls.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([typeId, v]) => ({ kind: 'hull', typeId, typeName: v.typeName, teamType: v.teamType }))
+  // 舰种显示名消解：21 个舰种只有 18 个不同 type_name（导驱 20/21、风帆 22/23/24 同名），
+  // 重名的补上站位名。规则放在构建期而不是页面里，是因为分类页、舰船详情页与客户端筛选
+  // 索引都要用同一个标签——写在页面里就是三份实现，早晚写出两种名字。
+  const hullSrc = [...hulls.entries()].sort((a, b) => a[0] - b[0]).map(([typeId, v]) => ({ typeId, ...v }))
+  const nameCount = new Map<string, number>()
+  for (const h of hullSrc) nameCount.set(h.typeName, (nameCount.get(h.typeName) ?? 0) + 1)
+  const positionName = new Map(positions.map((p) => [p.teamType, p.name]))
+  const hullLabel = new Map<number, string>()
+  const labelSeen = new Map<string, number>()
+  for (const h of hullSrc) {
+    const dupName = (nameCount.get(h.typeName) ?? 0) > 1
+    const position = positionName.get(h.teamType)
+    if (dupName && position === undefined) {
+      throw new Error(`舰种 ${h.typeId}（${h.typeName}）重名但站位 '${h.teamType}' 没有中文名，无法消解`)
+    }
+    const label = dupName ? `${h.typeName}·${position as string}` : h.typeName
+    const clash = labelSeen.get(label)
+    if (clash !== undefined) throw new Error(`舰种标签 '${label}' 被 ${clash} 与 ${h.typeId} 同时占用，分类页会撞名`)
+    labelSeen.set(label, h.typeId)
+    hullLabel.set(h.typeId, label)
+  }
+  const hull: EnumRow[] = hullSrc.map((h) => ({
+    kind: 'hull',
+    typeId: h.typeId,
+    typeName: h.typeName,
+    teamType: h.teamType,
+    label: hullLabel.get(h.typeId) as string,
+  }))
   const faction: EnumRow[] = factions
     .slice()
     .sort((a, b) => a.nationality - b.nationality)

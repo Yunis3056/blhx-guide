@@ -96,7 +96,7 @@ export function getShipPage(db: DatabaseSync, groupType: number): ShipPage | nul
       `SELECT s.group_type, s.name, s.english_name, s.code, s.index_id, s.rarity, s.has_retrofit,
               f.name AS faction_name, f.slug AS faction_slug,
               r.label AS rarity_label,
-              h.type_name, h.team_type
+              h.label AS type_name, h.team_type
        FROM ship s
        JOIN faction f ON f.nationality = s.nationality
        JOIN hull_type h ON h.type_id = s.ship_type

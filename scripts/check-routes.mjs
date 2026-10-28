@@ -70,7 +70,22 @@ for (const f of FACETS) {
   const sum = rows.reduce((n, r) => n + Number(r.n), 0)
   if (sum !== shipUrls.length) partition.push(`维度 ${f.key} 成员合计 ${sum} ≠ 图鉴 ${shipUrls.length}，有船落在这一维的导航之外`)
 }
-const allUrls = ['/', ...shipUrls, ...categoryUrls]
+const allUrls = ['/', '/ship/', ...shipUrls, ...categoryUrls]
+
+/**
+ * 客户端筛选索引与页面必须同代：`ships.index.json` 是从 `data/al.sqlite` 导出的静态资源，
+ *  turbo 缓存里它比页面新或旧都不会有报错——只有把它的 `dataSha` 与库里的对上才查得出来。
+ * 条目数也在这里核，避免「面板写着共 859 艘、列表筛出 800 艘」。
+ */
+const indexPath = join(OUT, 'data', 'ships.index.json')
+if (!existsSync(indexPath)) {
+  partition.push('缺客户端索引 out/data/ships.index.json（pipeline#client-index 没跑或在 next build 之后）')
+} else {
+  const idx = JSON.parse(readFileSync(indexPath, 'utf8'))
+  const dbSha = db.prepare("SELECT value FROM meta WHERE key = 'data_sha'").get()?.value
+  if (idx.dataSha !== dbSha) partition.push(`客户端索引代次 ${idx.dataSha} ≠ 库 ${dbSha}，筛选面板会给旧数据`)
+  if (idx.ships !== shipUrls.length) partition.push(`客户端索引 ${idx.ships} 条 ≠ 图鉴 ${shipUrls.length} 条`)
+}
 
 if (process.argv[2] === '--urls') {
   console.log(allUrls.join('\n'))
@@ -78,10 +93,11 @@ if (process.argv[2] === '--urls') {
 }
 
 // CI 的线上抽样名单：舰船页与分类页是两个独立的路由族，按比例从各自名单里取，
-// 否则 917 条里抽 5 条几乎全是舰船页，分类页整片没落上新代也照样绿。
+// 否则 900 多条里抽 5 条几乎全是舰船页，分类页整片没落上新代也照样绿。
+// 列表页 /ship 只有一张，但它的筛选索引是一次额外请求，所以固定带上了 /data 那份 json。
 if (process.argv[2] === '--sample') {
   const pick = (list) => [0, 0.5, 1].map((f) => list[Math.round(f * (list.length - 1))])
-  console.log(['/', ...pick(shipUrls), ...pick(categoryUrls)].join('\n'))
+  console.log(['/', '/ship/', ...pick(shipUrls), ...pick(categoryUrls), '/data/ships.index.json'].join('\n'))
   process.exit(0)
 }
 
@@ -150,7 +166,7 @@ if (!process.exitCode) {
     console.log(
       `路由覆盖一致：舰船页 ${shipUrls.length} / 分类页 ${detail}（合计 ${
         Object.values(perFacet).reduce((a, b) => a + b, 0)
-      }）/ 首页在位 / 产物里共 ${rendered.size} 页，无多余`,
+      }）/ 首页与 /ship 在位 / 客户端索引与库同代 / 产物里共 ${rendered.size} 页，无多余`,
     )
   }
 }

@@ -13,6 +13,7 @@
     "validate": "node --experimental-strip-types src/cli.ts validate",
     "normalize": "node --experimental-strip-types src/cli.ts normalize",
     "emit": "node --experimental-strip-types src/cli.ts emit",
+    "client-index": "node --experimental-strip-types src/cli.ts client-index",
     "images": "node --experimental-strip-types src/cli.ts images",
     "verify": "node --experimental-strip-types src/cli.ts verify"
   },

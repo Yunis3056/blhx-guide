@@ -9,7 +9,7 @@
  * 「某一项属性随突破的变化」，窄表直接按 attr 名取，不必知道它在数组第几位。
  */
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 export const DDL = `
 PRAGMA page_size = 4096;
@@ -73,10 +73,14 @@ CREATE TABLE team_position (
   evidence  TEXT NOT NULL
 );
 
+-- 「label」是消解重名后的显示名（21 个 type_name 只有 18 个不同，重名补站位名）。
+-- 消解规则在构建期算完落库（normalize/enums.ts），页面与客户端索引都只读这一列：
+-- 写在展示层就是三份实现，早晚在同名舰种上给出两种名字。
 CREATE TABLE hull_type (
   type_id   INTEGER PRIMARY KEY,
   type_name TEXT NOT NULL,
-  team_type TEXT NOT NULL
+  team_type TEXT NOT NULL,
+  label     TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE ship (
