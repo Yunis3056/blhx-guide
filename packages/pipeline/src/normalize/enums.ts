@@ -1,5 +1,7 @@
 import type { AttrMap } from './attr-map.ts'
 import type { HexagonAxis } from './hexagon.ts'
+import type { HandbookEntry } from '../display/handbook.ts'
+import type { PositionEntry } from '../display/positions.ts'
 import type { ShipRarity } from '../display/rarity.ts'
 import type { FactionEntry } from '../display/factions.ts'
 
@@ -18,6 +20,8 @@ export type EnumRow =
   | { kind: 'hull'; typeId: number; typeName: string; teamType: string }
   | { kind: 'faction'; nationality: number; slug: string; name: string; source: string }
   | { kind: 'equipKind'; typeId: number; typeName: string; typeName2: string }
+  | { kind: 'handbook'; handbookType: number; slug: string; name: string; evidence: string }
+  | { kind: 'position'; teamType: string; slug: string; name: string; evidence: string }
   | { kind: 'hexagonAxis'; pos: number; attr: string; label: string }
 
 export function buildEnumRows(
@@ -28,6 +32,8 @@ export function buildEnumRows(
   factionNames: ReadonlyMap<number, string>,
   equipKinds: ReadonlyMap<number, { typeName: string; typeName2: string }>,
   hexagonAxes: readonly HexagonAxis[],
+  handbooks: readonly HandbookEntry[],
+  positions: readonly PositionEntry[],
 ): { rows: EnumRow[]; counts: Record<EnumRow['kind'], number> } {
   const attrs: EnumRow[] = attrMap.attrs.map((a) => ({
     kind: 'attr',
@@ -59,7 +65,15 @@ export function buildEnumRows(
     .slice()
     .sort((a, b) => a.pos - b.pos)
     .map((a) => ({ kind: 'hexagonAxis', pos: a.pos, attr: a.attr, label: a.label }))
-  const rows = [...attrs, ...rarity, ...hull, ...faction, ...equip, ...hexagon]
+  const handbook: EnumRow[] = handbooks
+    .slice()
+    .sort((a, b) => a.handbookType - b.handbookType)
+    .map((k) => ({ kind: 'handbook', handbookType: k.handbookType, slug: k.slug, name: k.name, evidence: k.evidence }))
+  const position: EnumRow[] = positions
+    .slice()
+    .sort((a, b) => a.teamType.localeCompare(b.teamType))
+    .map((p) => ({ kind: 'position', teamType: p.teamType, slug: p.slug, name: p.name, evidence: p.evidence }))
+  const rows = [...attrs, ...rarity, ...hull, ...faction, ...equip, ...hexagon, ...handbook, ...position]
   return {
     rows,
     counts: {
@@ -69,6 +83,8 @@ export function buildEnumRows(
       faction: faction.length,
       equipKind: equip.length,
       hexagonAxis: hexagon.length,
+      handbook: handbook.length,
+      position: position.length,
     },
   }
 }

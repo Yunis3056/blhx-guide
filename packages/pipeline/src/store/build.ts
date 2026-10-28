@@ -65,6 +65,8 @@ interface Dataset {
   factions: Array<Extract<EnumRow, { kind: 'faction' }>>
   equipKinds: Array<Extract<EnumRow, { kind: 'equipKind' }>>
   hexagonAxes: Array<Extract<EnumRow, { kind: 'hexagonAxis' }>>
+  handbooks: Array<Extract<EnumRow, { kind: 'handbook' }>>
+  positions: Array<Extract<EnumRow, { kind: 'position' }>>
 }
 
 /** 插入顺序 = 外键依赖顺序：先枚举与 ship，再一切引用它们的表 */
@@ -83,6 +85,12 @@ function insertAll(db: DatabaseSync, d: Dataset): number {
 
   const insRarity = db.prepare('INSERT INTO rarity (value, label) VALUES (?,?)')
   for (const r of d.rarities) insRarity.run(r.value, r.label)
+
+  const insHandbook = db.prepare('INSERT INTO handbook_kind (handbook_type, slug, name, evidence) VALUES (?,?,?,?)')
+  for (const h of d.handbooks) insHandbook.run(h.handbookType, h.slug, h.name, h.evidence)
+
+  const insPosition = db.prepare('INSERT INTO team_position (team_type, slug, name, evidence) VALUES (?,?,?,?)')
+  for (const p of d.positions) insPosition.run(p.teamType, p.slug, p.name, p.evidence)
 
   const insHull = db.prepare('INSERT INTO hull_type (type_id, type_name, team_type) VALUES (?,?,?)')
   for (const h of d.hulls) insHull.run(h.typeId, h.typeName, h.teamType)
@@ -198,7 +206,8 @@ function insertAll(db: DatabaseSync, d: Dataset): number {
 }
 
 const TABLES = [
-  'faction', 'attr_def', 'hexagon_axis', 'rarity', 'hull_type', 'equip_kind', 'ship', 'ship_stage',
+  'faction', 'attr_def', 'hexagon_axis', 'rarity', 'handbook_kind', 'team_position', 'hull_type', 'equip_kind',
+  'ship', 'ship_stage',
   'ship_stage_attr', 'ship_stage_slot', 'ship_skill', 'ship_skin',
   'orphan_skin', 'ship_voice', 'ship_source', 'retrofit', 'retrofit_node', 'fleet_tech_group', 'fleet_tech_node',
   'fleet_tech_node_add', 'fleet_tech_ship',
@@ -234,6 +243,8 @@ export function buildDatabase(normalizedDir: string, outPath: string, dataSha: s
     factions: enums.filter((e) => e.kind === 'faction'),
     equipKinds: enums.filter((e) => e.kind === 'equipKind'),
     hexagonAxes: enums.filter((e) => e.kind === 'hexagonAxis'),
+    handbooks: enums.filter((e) => e.kind === 'handbook'),
+    positions: enums.filter((e) => e.kind === 'position'),
   }
 
   // 一个事务包全部插入：逐条自动提交时 4 万行属性写要跑几分钟（每条一次落盘同步），

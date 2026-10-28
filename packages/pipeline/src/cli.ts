@@ -14,6 +14,8 @@ import { readShipRows, groupStageRows, rarityBySkin, assertStageShape } from './
 import { readGametip } from './display/gametip.ts'
 import { loadFactions, assertNamesAgreeWithGametip, assertCovers, factionMap } from './display/factions.ts'
 import { loadRarityDecl, buildShipRarity, assertObservedRarity } from './display/rarity.ts'
+import { loadHandbook, assertHandbookCovers } from './display/handbook.ts'
+import { loadPositions, assertPositionsCovers } from './display/positions.ts'
 import { buildShipRecords } from './normalize/ship.ts'
 import { buildRetrofits } from './normalize/retrofit.ts'
 import { buildVoice } from './normalize/voice.ts'
@@ -358,7 +360,15 @@ function cmdNormalize(argv: string[]): void {
     new Map(attrMap.attrs.map((a) => [a.name, a.label])),
   )
 
-  const enums = buildEnumRows(attrMap, shipRarity, hulls, factions, factionNames, equipKinds, hexagonAxes)
+  // 图鉴分类的取值域与库里实测分布对账：出现枚举外的值、或登记了库里没有的值，都停
+  const handbooks = loadHandbook(manualPath(ROOT, 'handbook'))
+  assertHandbookCovers(handbooks, built.ships.map((s) => s.handbookType))
+
+  // 站位同理：舰种表里出现的 team_type 必须都登记了中文名，登记了的必须真有舰种
+  const positions = loadPositions(manualPath(ROOT, 'positions'))
+  assertPositionsCovers(positions, [...hulls.values()].map((h) => h.teamType))
+
+  const enums = buildEnumRows(attrMap, shipRarity, hulls, factions, factionNames, equipKinds, hexagonAxes, handbooks, positions)
 
   const retrofits = buildRetrofits(root, sha)
   const voice = buildVoice(root, sha)
@@ -406,6 +416,8 @@ function cmdNormalize(argv: string[]): void {
     ['enum-faction', enums.counts.faction, 29],
     ['enum-equip-kind', enums.counts.equipKind, 19],
     ['enum-hexagon-axis', enums.counts.hexagonAxis, 6],
+    ['enum-handbook', enums.counts.handbook, 4],
+    ['enum-position', enums.counts.position, 3],
     ['ship-slots', built.slots.length, 17135],
     ['ship-skills', built.skills.length, 9239],
     ['ship-voice', voice.rows.length, 43495],
@@ -422,6 +434,9 @@ function cmdNormalize(argv: string[]): void {
   const orphanSkins = built.skins.filter((s) => !groups.has(s.groupType)).length
   log(`  舰船无稀有度 ${noRarity} · 无阵营名 ${noFaction} · 孤儿皮肤 ${orphanSkins}（孤儿只登记不建页）`)
   log(`  六维轴定位（相关取最大项，非属性 id 顺序）：${hexagonAxes.map((a) => `${a.pos}=${a.label}`).join(' ')}`)
+  const hullCountByTeam = new Map<string, number>()
+  for (const h of hulls.values()) hullCountByTeam.set(h.teamType, (hullCountByTeam.get(h.teamType) ?? 0) + 1)
+  log(`  站位（舰种数）：${positions.map((p) => `${p.name} ${hullCountByTeam.get(p.teamType) ?? 0}`).join(' · ')}`)
   log(`  隔离清单 ${quarantineFile.rows} 条 → reports/quarantine.jsonl.gz`)
   for (const w of written) log(`  ${w.file.padEnd(26)} ${String(w.rows).padStart(5)} 行  ${(w.bytes / 1024).toFixed(1)} KB gz`)
   log(`  manifest.json：seq ${seq} · ${written.length} 个 jsonl 的 sha256 已登记`)

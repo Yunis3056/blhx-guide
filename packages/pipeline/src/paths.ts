@@ -8,5 +8,7 @@ import { join } from 'node:path'
  * 症状是「改了人工表却不重建产物」——缓存在看一个目录，表放在另一个目录。
  */
 
-export const manualPath = (projectRoot: string, name: 'factions' | 'rarity'): string =>
-  join(projectRoot, 'data', 'manual', `${name}.json`)
+export const manualPath = (
+  projectRoot: string,
+  name: 'factions' | 'rarity' | 'handbook' | 'positions',
+): string => join(projectRoot, 'data', 'manual', `${name}.json`)

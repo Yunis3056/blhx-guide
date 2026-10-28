@@ -1,0 +1,23 @@
+{
+  "note": "站位人工表：上游 team_type 只有英文枚举 vanguard / main / submarine，中文名要从 gametip 读回，但三个位置的读回强度不一样（前排/后排有 1:1 词条，潜艇只有同族后缀），所以名字落在这里，evidence 写清凭什么。取值域与实测分布由 assertPositionsCovers 对账：舰种表出现未登记的 team_type、或登记的站位没有舰种，都中止构建。",
+  "positions": [
+    {
+      "teamType": "vanguard",
+      "slug": "vanguard",
+      "name": "前排先锋",
+      "evidence": "gametip 词条 index_fleetfront 的文本就是「前排先锋」。舰种表里挂 vanguard 的 9 个舰种是 驱逐(1) 轻巡(2) 重巡(3) 航巡(9) 雷巡(11) 超巡(18) 运输(19) 导驱(20) 风帆(23)，实测 531 艘船，与编队界面的前排槽位一致。"
+    },
+    {
+      "teamType": "main",
+      "slug": "main",
+      "name": "后排主力",
+      "evidence": "gametip 词条 index_fleetrear 的文本就是「后排主力」。舰种表里挂 main 的 9 个舰种是 战巡(4) 战列(5) 轻航(6) 正航(7) 航战(10) 维修(12) 重炮(13) 导驱(21) 风帆(24)，实测 281 艘船。同名舰种靠站位分开：导驱 20 是前排、21 是后排。"
+    },
+    {
+      "teamType": "submarine",
+      "slug": "submarine",
+      "name": "潜艇编队",
+      "evidence": "潜艇没有 1:1 的 index_* 词条，名字来自 gametip 的 ship_formationUI_fleetName_{normal,easy,hard,extra}_ss 四条，文本分别是 普通/简单/困难/EX 潜艇编队，共同后缀「潜艇编队」；不带 _ss 的同族四条则一律以「舰队」结尾，后缀分组稳定。舰种表里挂 submarine 的 3 个舰种是 潜艇(8) 潜母(17) 风帆(22)，实测 47 艘船。"
+    }
+  ]
+}

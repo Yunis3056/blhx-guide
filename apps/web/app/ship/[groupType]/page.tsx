@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { AttrCurve } from '../../../components/ship/attr-curve'
 import { openDb, readMeta } from '../../../lib/db'
 import { getShipPage, getHexagon, getShipSkills, getShipSlots, getShipVoice, listShips } from '../../../lib/queries/ship'
+import { shipFacetLinks } from '../../../lib/queries/facets'
 
 /**
  * 舰船详情页。
@@ -56,6 +57,7 @@ export default async function ShipPage({ params }: { params: Promise<Params> }) 
   const firstSkills = skillRows[0]
   const skillsSame = firstSkills !== undefined && skillRows.every((r) => skillKey(r.skills) === skillKey(firstSkills.skills))
   const voiceRows = getShipVoice(db, group)
+  const facetLinks = shipFacetLinks(db, group)
 
   return (
     <main>
@@ -79,6 +81,16 @@ export default async function ShipPage({ params }: { params: Promise<Params> }) 
         <span>
           group_type <b>{ship.groupType}</b>
         </span>
+      </p>
+      <p className="kv">
+        {facetLinks.map((l) => (
+          <span key={`${l.key}/${l.slug}`}>
+            {l.label}{' '}
+            <a href={`/category/${l.key}/${encodeURIComponent(l.slug)}/`}>
+              <b>{l.valueLabel}</b>
+            </a>
+          </span>
+        ))}
       </p>
 
       {ship.growthExtraUsed && (

@@ -1,0 +1,29 @@
+{
+  "note": "数字 handbook_type → 图鉴分类身份。上游没有给这四个值配中文名（gametip 里搜不到 handbook 相关词条），所以这一跳是人工层，且**没有可回读比对的文本源**——与阵营表不同，这里的名字改一个字不会让构建中止，只能靠证据本身。因此每条都写清是怎么钉上的，页面显示时也带上这条口径。取值域由 normalize 与 ship_data_group 的实际分布互相对账：出现枚举外的值即中止，登记不全也即中止。",
+  "kinds": [
+    {
+      "handbookType": 0,
+      "slug": "regular",
+      "name": "常规舰船",
+      "evidence": "667 条。获取方式来自 GETBOAT / SHOP / LEVEL 等建造与掉落命令，不是科研蓝图也不是 META 命令"
+    },
+    {
+      "handbookType": 1,
+      "slug": "collab",
+      "name": "联动舰船",
+      "evidence": "91 条。所属 nationality 全部落在联动阵营（海王星 / 偶像大师 / 闪乱神乐 / hololive 等），获取方式是「限时活动：…」的纯文本项（command 为空）"
+    },
+    {
+      "handbookType": 2,
+      "slug": "research",
+      "name": "科研船",
+      "evidence": "42 条，与 ship_data_blueprint 的 42 个科研项目船、以及获取方式里 SHIPBLUEPRINT 命令覆盖的 42 艘完全相等；不是改造（改造在 trans_* 与 transform_data_template）"
+    },
+    {
+      "handbookType": 3,
+      "slug": "meta",
+      "name": "META",
+      "evidence": "59 条，与 nationality=97（META 阵营）的 59 艘完全相等；获取方式命令 METACHARACTER 覆盖其中 50 艘"
+    }
+  ]
+}

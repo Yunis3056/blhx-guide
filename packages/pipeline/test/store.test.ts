@@ -176,6 +176,44 @@ test('§4.3 的读路径逐条可查', { skip }, () => {
     assert.equal(count(db, 'SELECT COUNT(*) AS n FROM ship WHERE nationality = 97'), 59)
     assert.equal(count(db, 'SELECT COUNT(*) AS n FROM ship WHERE nationality = 98'), 3)
     assert.equal(count(db, 'SELECT COUNT(*) AS n FROM ship WHERE has_retrofit = 1'), 106)
+
+    // 分类页的分区断言：五个维度各自把 859 艘船分完，落进导航之外一艘就是建页漏船
+    for (const sql of [
+      'SELECT COUNT(*) AS n FROM ship s JOIN faction f ON f.nationality = s.nationality',
+      'SELECT COUNT(*) AS n FROM ship s JOIN hull_type h ON h.type_id = s.ship_type',
+      'SELECT COUNT(*) AS n FROM ship s JOIN hull_type h ON h.type_id = s.ship_type JOIN team_position p ON p.team_type = h.team_type',
+      'SELECT COUNT(*) AS n FROM ship s JOIN rarity r ON r.value = s.rarity',
+      'SELECT COUNT(*) AS n FROM ship s JOIN handbook_kind k ON k.handbook_type = s.handbook_type',
+    ]) {
+      assert.equal(count(db, sql), 859, sql)
+    }
+    // 阵营登记了 29 个但实测有船的只有 28 个（鸢尾教国 0 艘），零成员不建页
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM faction'), 29)
+    assert.equal(
+      count(
+        db,
+        `SELECT COUNT(*) AS n FROM (SELECT f.nationality FROM faction f
+         LEFT JOIN ship s ON s.nationality = f.nationality GROUP BY f.nationality HAVING COUNT(s.group_type) > 0)`,
+      ),
+      28,
+    )
+    assert.equal(get<{ name: string }>(db, 'SELECT f.name FROM faction f WHERE f.nationality = 10').name, '鸢尾教国')
+    // 舰种名不唯一（21 个舰种 18 个名），所以 slug 用 type_id、同名靠站位补标签
+    assert.equal(count(db, 'SELECT COUNT(DISTINCT type_name) AS n FROM hull_type'), 18)
+    assert.deepEqual(
+      db.prepare('SELECT name FROM team_position ORDER BY team_type').all().map((r) => r.name),
+      ['后排主力', '潜艇编队', '前排先锋'],
+    )
+    assert.deepEqual(
+      db
+        .prepare(
+          `SELECT k.slug, COUNT(s.group_type) AS n FROM handbook_kind k
+           JOIN ship s ON s.handbook_type = k.handbook_type GROUP BY k.handbook_type ORDER BY k.handbook_type`,
+        )
+        .all()
+        .map((r) => `${r.slug}:${r.n}`),
+      ['regular:667', 'collab:91', 'research:42', 'meta:59'],
+    )
     db.close()
   })
 })
@@ -187,7 +225,7 @@ test('meta 里记了 schema 版本、来源 SHA 与逐表行数（不含时间�
     const rows = db.prepare('SELECT key, value FROM meta ORDER BY key').all() as Array<{ key: string; value: string }>
     const meta = new Map(rows.map((r) => [r.key, r.value]))
     db.close()
-    assert.equal(meta.get('schema_version'), '2')
+    assert.equal(meta.get('schema_version'), '3')
     assert.equal(meta.get('data_sha'), sha)
     assert.equal(meta.get('count:ship'), '859')
     assert.equal(meta.get('count:ship_stage_attr'), '41124')
@@ -196,6 +234,8 @@ test('meta 里记了 schema 版本、来源 SHA 与逐表行数（不含时间�
     assert.equal(meta.get('count:ship_voice'), '43495')
     assert.equal(meta.get('count:hexagon_axis'), '6')
     assert.equal(meta.get('count:equip_kind'), '19')
+    assert.equal(meta.get('count:handbook_kind'), '4')
+    assert.equal(meta.get('count:team_position'), '3')
     assert.equal(meta.get('count:retrofit_node'), '1217')
     assert.equal(meta.get('count:orphan_skin'), '358')
     assert.ok(!rows.some((r) => /sync|time|date/i.test(r.key)), 'meta 里出现了时间类键，建库就不再字节可复现')

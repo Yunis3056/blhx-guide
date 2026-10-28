@@ -1,16 +1,20 @@
 import { openDb, readMeta } from '../lib/db'
 import { listShips } from '../lib/queries/ship'
+import { assertFacetsSane, facets } from '../lib/queries/facets'
 
 /**
- * 首页只做一件事：公开「库里有多少」与「数据来自哪一代快照」。
+ * 首页：公开「库里有多少」「数据来自哪一代快照」，并作为分类页的唯一入口。
  *
- * 这里不放任何指向未渲染路由的链接（列表页与分类页在 §7 阶段 2 的后续切片里接上）——
- * 静态站上的死链不会报错，只会在用户点下去时变成 404。
+ * 链接全部由取值查询生成，不手写任何一条——静态站上的死链不会报错，
+ * 只会在用户点下去时变成 404，所以名单必须和 `generateStaticParams` 同源。
  */
 export default function HomePage() {
   const db = openDb()
   const meta = readMeta(db)
   const ships = listShips(db)
+  const list = facets(db)
+  assertFacetsSane(list)
+  const pages = list.reduce((n, f) => n + f.values.length, 0)
   const count = (key: string): string => meta.get(key) ?? '—'
 
   return (
@@ -57,6 +61,26 @@ export default function HomePage() {
         以上每一行都有对应的静态页：{ships.length} 个 <code>/ship/&lt;group_type&gt;/</code>。
         页面由构建期的 <code>data/al.sqlite</code> 生成，运行时不查库。
       </p>
+
+      <h2>分类导航</h2>
+      <p className="note">
+        每个取值一页，共 {pages} 张；页面名单由 <code>data/al.sqlite</code> 的取值查询现算，
+        所以「有这一页」与「库里这个值真有船」是同一件事。零成员的值不建页（实测阵营里有 1 个）。
+      </p>
+      {list.map((f) => (
+        <div key={f.key}>
+          <h3>{f.label}</h3>
+          <p className="kv">
+            {f.values.map((v) => (
+              <span key={v.slug}>
+                <a href={`/category/${f.key}/${encodeURIComponent(v.slug)}/`}>
+                  {v.label} <b>{v.count}</b>
+                </a>
+              </span>
+            ))}
+          </p>
+        </div>
+      ))}
 
       <h2>数据边界</h2>
       <ul>

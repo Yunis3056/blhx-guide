@@ -9,7 +9,7 @@
  * 「某一项属性随突破的变化」，窄表直接按 attr 名取，不必知道它在数组第几位。
  */
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export const DDL = `
 PRAGMA page_size = 4096;
@@ -51,6 +51,26 @@ CREATE TABLE equip_kind (
 CREATE TABLE rarity (
   value INTEGER PRIMARY KEY,
   label TEXT NOT NULL
+);
+
+-- 图鉴分类：数字 handbook_type → 分类身份。上游没有中文名源，所以这一张
+-- 来自 data/manual/handbook.json，且带证据文本——页面上要能自证它凭什么这么叫。
+CREATE TABLE handbook_kind (
+  handbook_type INTEGER PRIMARY KEY,
+  slug          TEXT NOT NULL UNIQUE,
+  name          TEXT NOT NULL,
+  evidence      TEXT NOT NULL
+);
+
+-- 站位：team_type 英文枚举 → 分类身份。前排与后排各有 1:1 的 gametip 词条
+-- （index_fleetfront / index_fleetrear），潜艇只有 *_ss 同族后缀，三者读回强度不齐，
+-- 所以名字统一来自 data/manual/positions.json 并各带证据。
+-- 它同时是舰种同名（导驱 20/21、风帆 22/23/24）的消歧依据，页面不许自己翻译枚举。
+CREATE TABLE team_position (
+  team_type TEXT PRIMARY KEY,
+  slug      TEXT NOT NULL UNIQUE,
+  name      TEXT NOT NULL,
+  evidence  TEXT NOT NULL
 );
 
 CREATE TABLE hull_type (

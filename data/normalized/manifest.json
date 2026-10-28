@@ -47,9 +47,9 @@
       "sha256": "50fbded63e22d2477cb14e0c55991ef3e74d30da7eb954c8c2b6d726c7567ad3"
     },
     "enums.jsonl.gz": {
-      "rows": 92,
-      "bytes": 1589,
-      "sha256": "d0113c617058fb6354b0d2527824ed6616fa1cd12b20c9f8e3c94acfbb37f57e"
+      "rows": 99,
+      "bytes": 2662,
+      "sha256": "cbe2181eb138f5f4c3dfdf2a42003a5aac8bf7b7664f2798c9a93f02de0db814"
     }
   },
   "tableDirs": {
