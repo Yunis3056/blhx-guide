@@ -1184,7 +1184,7 @@ export function getSourcesForItem(itemId: number): ChapterSource[]
 | LCP | < 3.5s（国内 4G） | Cloudflare 免费版无大陆节点，预算相应放宽 |
 | Lighthouse | SEO ≥ 95，A11y ≥ 90，Perf ≥ 85 | |
 
-**产物文件数预算**：一条路由在 `output: 'export'` + App Router 下产出**两个文件**，不是一个——`index.html` 与 RSC 载荷 `index.txt`。917 条路由（舰船 859 + 分类页 57 + 首页 1）实测 **1,855 个文件** = 917×2 = 1,834 路由文件 + 首页的 RSC 之外少一个（404 族只出 `404.html` 与 `404/index.html` 两个 HTML，没有 RSC 载荷）+ 18 个 `.js` + 1 个 `.css` 共享 chunk。所以 18,000 这条守卫线等价于**约 8,900 条路由**，不是 18,000 条。
+**产物文件数预算**：一条路由在 `output: 'export'` + App Router 下产出**两个文件**，不是一个——`index.html` 与 RSC 载荷 `index.txt`。917 条路由（舰船 859 + 分类页 57 + 首页 1）实测 **1,855 个文件** = 917 × 2 = 1,834 个路由文件，加 21 个非路由文件（404 族的 `404.html` 与 `404/index.html` 两个，它没有 RSC 载荷；18 个 `.js` + 1 个 `.css` 共享 chunk）。所以 18,000 这条守卫线等价于**约 8,900 条路由**，不是 18,000 条。
 
 | 项 | 路由数 | 文件数（×2） |
 |---|---|---|
@@ -1207,7 +1207,7 @@ export function getSourcesForItem(itemId: number): ChapterSource[]
 |---|---|---|---|
 | 产物文件数 | 1,855（917 路由 ×2 + 404 的两个 HTML + 19 个共享 chunk） | < 18,000 | 余量 9.7× |
 | 产物总体积 | 实际字节 94.83 MiB（HTML 60.6 MiB + RSC 33.3 MiB + JS/CSS 0.8 MiB）；`du -sh` 报的更大值是块对齐值 | — | RSC 载荷占实际字节 35% |
-| 最大单文件 | 219,010 B（`framework-*.js`） | < 25 MiB | 余量四个数量级 |
+| 最大单文件 | 382,369 B（分类页 `category/handbook/regular/index.html`，667 行表格）；最大 `.js` 是 219,010 B（`framework-*.js`） | < 25 MiB | 两台机器同一个文件同高，余量四个数量级 |
 | 舰船页 HTML | 45,304 – 137,239 B（中位 68,909） | < 60KB gzip | 最大一页 gzip **29,503 B**，余量 2.0× |
 | 分类页 HTML | 9,183 – 382,369 B（中位 22,117；667 行的「常规舰船」最大） | < 60KB gzip | 最大一页 gzip **29,508 B**——列表页行数 5× 于舰船页，gzip 后与最重的舰船页同高，因为表格里全是重复的标签与结构 |
 | 单页 RSC 载荷 | 5,942 – 232,862 B（舰船页中位 37,616） | — | 只在客户端导航时取，不进首屏 |
@@ -1225,7 +1225,7 @@ export function getSourcesForItem(itemId: number): ChapterSource[]
 | `turbo run build --force` 墙钟 | **594** | 差值 576 秒全部落在任务报时之后 |
 | `turbo run build`（指纹未变，重放缓存） | 29.9 | 代价只剩产物回写 |
 
-那 576 秒是 turbo 归档 `outputs = out/**` 的 1,855 个小文件：同一台机器上只归档 1 个文件的 `pipeline#emit`，墙钟比任务自报只多 0.3 秒。**所以本地墙钟不是构建成本**，上线看的数只有 CI 的 `pnpm build`（Linux 冷构建，秒级，见 §6.7）；本地的高墙钟只在指纹变化那一次付，重放是 30 秒。本地产物与 CI 产物的文件数不同，且差值全在 `.js`：HTML 与 RSC 载荷两边逐个相同，共享 chunk 是构建机切包的产物，不是缓存残留（本地删净 `.next`、`out/` 与 tsbuildinfo 冷构建仍是同一个数）。预算守卫因此把非路由文件逐个列出，让这类差值停留在「哪两个 chunk」而不是「总数对不上」。
+那 576 秒是 turbo 归档 `outputs = out/**` 的 1,855 个小文件：同一台机器上只归档 1 个文件的 `pipeline#emit`，墙钟比任务自报只多 0.3 秒。**所以本地墙钟不是构建成本**，上线看的数只有 CI 的 `pnpm build`（Linux 冷构建 17 秒，见 §6.7）；本地的高墙钟只在指纹变化那一次付，重放是 30 秒。产物文件数本地 1,855、CI 1,853，差值全在 `.js`（本地 18 / CI 16），HTML 与 RSC 载荷两边**数量逐个相等**（919 个 `.html` / 917 个 `.txt`；尺寸未逐台比对，线上一致性另有 §6.7 的「线上取回与上传字节等长」这条）。逐文件名比对出来的差异只有两类：`718.*.js` 与 `931.*.js` 两个 chunk 只在本地出现（这就是 2 个文件之差），另有 7 个同名 chunk（`webpack` / `main` / `main-app` / `layout` / `_app` / `_error` / `_not-found` 的 page）在两台机器上内容哈希不同；`framework`、`polyfills`、`341`、`740c43c4` 与 `app/page-*` 两边逐字节同名。本地删净 `.next`、`out/` 与 tsbuildinfo 冷构建仍是 18 个——不是缓存残留，是构建机切包差异。预算守卫因此把非路由文件逐个列出，让这类差值停留在「哪两个 chunk」而不是「总数对不上」。
 
 **国内体验措施**：
 
@@ -1790,7 +1790,7 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 
 这条链路上实测到的三件事：
 
-- **基线**：ubuntu-latest + Node 24 上整个 job 75 秒（14 步：install → 四项检查 → 构建 → 三段守卫 → 直传 → 线上自检），其中 `pnpm build` 23 秒、直传 21 秒，产物 1,738 文件 / 859 条路由。`node:sqlite` 与 `sharp` 在这台机器上都不需要实验标志——原本挂在「Pages 构建镜像」上的那条待实测，随 Direct Upload 一起作废
+- **基线**（commit `115a1b9` / run `40629682597`，917 条路由这一代）：ubuntu-latest + Node 24 上整个 job **51 秒**（14 步：install → 四项检查 → 构建 → 三段守卫 → 直传 → 线上自检），其中 `pnpm build` **17 秒**、直传 **16 秒**、线上自检 1 秒，产物 **1,853 文件（html 919 · txt 917 · js 16 · css 1）**。`node:sqlite` 与 `sharp` 在这台机器上都不需要实验标志——原本挂在「Pages 构建镜像」上的那条待实测，随 Direct Upload 一起作废
 - **直传是内容寻址的**：同一份产物第二次部署报 `Uploaded 0 files (N already uploaded)`、0.53 秒。所以「每次 push 都部署」的边际成本几乎只剩 Pages 侧换代，不是重传
 - **`pnpm/action-setup@v4` 不接受 `version` 输入**（当 `package.json` 已有 `packageManager` 时）：它会以 `ERR_PNPM_BAD_PM_VERSION` 直接退出，后面所有步骤 skip。版本口径只留 `packageManager` 一处
 
@@ -1812,7 +1812,7 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 | 1.9 | 图片：1 艘船的 icon + 默认立绘 + 1 张换装，**skinId 精确 join** → sharp → LocalAdapter（**仅本地验证，不上线**） | 实测 `--limit=1`（group 10000）出 7 个产物、`--group=20502` 再 7 个，共 14 文件 992KB；全部 EN 命中、零降级；第二次跑同一艘船下载 0 张跳过 7 项 |
 | 1.10 | Next.js 脚手架 + `/ship/[groupType]`（**仅 1 艘**）+ §4.6 全部配置项 | 实测：`out/` 24 文件 953KB，详情页 HTML 47.7KB，首页 First Load JS 106KB；`/ship/99999/` 走 404；页面渲染 12 项属性表 + 12 张 1–100 端点图 + 5 个皮肤（含 CV）+ 12 条改造节点（中文 descrip，机器格式 effect 不入库展示）+ 舰级与科技点 + 3 条获取方式；构建期与浏览器双端零 console 错误 |
 | 1.11 | 部署 Pages（**无图版本**，立绘位置渲染占位块） | 实测：`wrangler pages project create blhx-guide` + `pages deploy apps/web/out` 直传 24 文件，3.46s 上传完成。线上 `https://blhx-guide.pages.dev/` 与 `/ship/20502/` 均 200，`/ship/99999/` 404；线上 HTML 里 `undefined/`、`/_next/image`、`<img>` 全部 0 命中 |
-| 1.12 | 冷构建实测：记录产物文件数、构建时长、`out/` 清单；确认 `node:sqlite` 是否需要 `NODE_OPTIONS=--experimental-sqlite`；确认 `sharp` 在构建镜像里的可用性 | **Actions Linux 基线（通道 A，859 页全量）**：整条 job 75 秒、`pnpm build` 冷构建 23 秒，产物 1,738 文件（明细见 §4.5 与 §7 阶段 2）；`node:sqlite` 与 `sharp` 在 ubuntu-latest + Node 24 上都不需要任何实验标志——`sharp` 是被 `pnpm test` 里两条真实编码断言（体积硬失败、占位图比例）在 Linux 上跑绿的，`pipeline#images` 本身不在 CI 链路里。Pages 构建镜像那条路已随 Direct Upload 作废 |
+| 1.12 | 冷构建实测：记录产物文件数、构建时长、`out/` 清单；确认 `node:sqlite` 是否需要 `NODE_OPTIONS=--experimental-sqlite`；确认 `sharp` 在构建镜像里的可用性 | **Actions Linux 基线（通道 A）**见 §6.7，随产物代次更新（当前 917 条路由 / 1,853 文件 / 整条 job 51 秒）；`node:sqlite` 与 `sharp` 在 ubuntu-latest + Node 24 上都不需要任何实验标志——`sharp` 是被 `pnpm test` 里两条真实编码断言（体积硬失败、占位图比例）在 Linux 上跑绿的，`pipeline#images` 本身不在 CI 链路里。Pages 构建镜像那条路已随 Direct Upload 作废 |
 
 **Pages 侧的构建通道换了含义**：选定 wrangler 直传（Direct Upload）后，Pages 不再跑 `pnpm build`，所以原本挂在「Pages 构建镜像」上的两个待实测项（`node:sqlite` 是否需要显式标志、`sharp` 在 Pages Linux 的可用性）转移到了**真正执行构建的那台机器**上——目前是开发机（Windows + Node 24.21，两项都已实测可用），若接 GitHub Actions 就是 ubuntu-latest + Node 24。三条可选路径与代价：
 
@@ -1822,7 +1822,7 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 | `ci.yml` 构建 + 直传 **（2026-10-28 选定）** | GitHub Actions ubuntu-latest | 要把 Cloudflare 令牌存进仓库 Secrets；构建环境从 Pages 镜像换成 Actions 镜像，`node:sqlite` / `sharp` 要在新镜像里重测一次 |
 | Pages Git 集成（Connected） | Pages 自己的构建镜像 | 回到原命题：Pages Linux 镜像里 `node:sqlite` 与 `sharp` 的可用性未验；且 Root directory 必须留空为仓库根，填 `apps/web` 会跳过 emit 前置步骤（§4.6 的难察觉失败） |
 
-**直传不改写 HTML**：`/ship/20502/` 线上取回的字节数与本地 `out/` 里那份完全相同（82,009），45 处差异全部落在 `<script>` 引用的 chunk 名上——同一长度、不同十六进制，因为产物是在 Linux runner 上构建的，而 Linux 与 Windows 导出的共享 chunk 本来就不是同一批（§4.5 的 15 / 17 个 js）。标签结构两边一致（都是 4 行、同一处以 `>` 结尾），所以Pages 侧没有做体积可感的 HTML 压缩，比预算用哪个口径都一样。真正会变的是引用的 chunk 名，这也意味着**「本地重跑一遍就能拿到与线上一致的产物」不成立**，跨机一致性的范围只到数据层（§4.6 的 jsonl 与 sqlite 逐字节相同）。
+**直传不改写 HTML**：`/ship/20502/`（commit `115a1b9` 这一代）线上取回 **83,521 字节，与本地 `out/` 里那一份逐字节等长**，不相同的只有 2 处——HTML 引用的 5 个 chunk 里 `main-app-*` 与 `webpack-*` 的名字在 Linux runner 上算出的哈希不同（`740c43c4-*`、`341-*`、`polyfills-*` 三个同名同路径）。长度不变而只有哈希换字，说明 Pages 侧没有做体积可感的 HTML 压缩，比预算用哪个口径都一样。真正会变的是引用的 chunk 名，这也意味着**「本地重跑一遍就能拿到与线上一致的产物」不成立**，跨机一致性的范围只到数据层（§4.6 的 jsonl 与 sqlite 逐字节相同）。
 
 **令牌权限以实测为准**：这把令牌在 `GET /user/tokens/verify` 上返回 `Invalid API Token`，却能列账户下的 Pages 项目、能建项目、能直传部署——按提示判断会误判成「令牌不能用」，按调用结果判断才知道它够用。R2 的 S3 兼容凭证（access key / secret）在无图模式下完全没用到。
 
@@ -1832,13 +1832,15 @@ CLOUDFLARE_API_TOKEN=$(cat <仓库外的 token 文件>) \
 
 **2.1 全量预渲染（已跑通，D-verified 2026-10-28）**：`generateStaticParams` 从固定 1 艘改为读 `ship` 表全量 859 条，`lib/slice.ts`（手写名单）随之删除——名单只能有一个来源，否则 CI 守卫验的是「脚本里写了哪些」而不是「库里有哪些」。路由覆盖改用 `scripts/check-routes.mjs`（§4.6）。首页重写为总览：计数、快照代次与「数据边界」清单，不链接任何尚未渲染的路由。实测数字全部在 §4.5 的表里，其中两条推翻了我自己的推算：**一条路由产出两个文件**（`index.html` + RSC `index.txt`，18,000 线等价于约 8,900 条路由），**共享 chunk 只有 18 个而不是 ~300 个**（且页数增长不影响首屏 JS）。
 
-CI 侧已在 run #3（`ef6301e`，通道 A）全绿核过：`产物文件数 1,738（Linux）/ 1,740（本地）`、`路由覆盖一致：图鉴 859 条 / 已渲染 859 页 / 首页在位`、直传 21 秒、`pnpm build` 冷构建 23 秒、整条 job 75 秒（含取机、装依赖、部署与线上自检）。线上按 `ship` 表抽样 8 页（10000 / 10329 / 20511 / 30512 / 40407 / 80204 / 1030003 / 1150006）全部 200，未渲染路径 404。
+CI 侧的首个全量 run（#3，`ef6301e`，通道 A）全绿：`产物文件数 1,738（Linux）/ 1,740（本地）`、直传 21 秒、`pnpm build` 冷构建 23 秒、整条 job 75 秒，线上抽样 8 页全部 200、未渲染路径 404。这些是 859 页那一代的数，当前基线见 §6.7。
 
 **2.2 详情页补全（技能 / 装备位 / 六维 / 语音，已跑通，D-verified 2026-10-28）**：`ship_data_template`（注册过但一直没被消费的那张表）进入链路，新增 `ship_skill` 9,239 行、`ship_stage_slot` 17,135 行、`hexagon_axis` 6 行、`equip_kind` 19 行、`ship_voice` 43,495 行，`ship` 加 `hexagon` 列。三条链路的判据与被推翻的猜测都记在 §4.3，其中最重要的一条是**六维数组的顺序不是属性顺序**，照 id 贴标签会错四个轴。
 
 语音的粒度是 (皮肤, 场景, 竖线拆出的台词序号)：`shipSkinWords` 加进取数白名单（解出 25/25），859 艘船每艘都有语音，2,485 个皮肤 × 79 个场景字段拆完 43,495 条，入库的 `data/normalized/ship-voice.jsonl.gz` 1.78 MiB。场景名没有 CN 文本源，页面显示字段键名并记进数据边界；`voice_key` / `gift_prefer` / `gift_dislike` / `couple_encourage` 各自的问题见 §4.3 的表，都不消费。**改造后技能名不在这一层**：改造行的 `id - skin_id = 104`，不是阶段行（1–4），所以改造带来的技能（例：厌战的 11870「神射手·改」）不进 `ship_skill`，`trans_skill` 的语义也未定，页面已收回这条显示（§4.3）。
 
 **2.3 分类页（已跑通，D-verified 2026-10-28）**：五个单维分类页 57 张（阵营 28 / 舰种 17 / 站位 3 / 稀有度 5 / 图鉴分类 4），名单、成员与守卫共用同一批 SQL，`/ship/<id>/` 页面链向它所属的每个分类页，首页列出全部 57 条链接。为此新增两张枚举表：`handbook_kind` 4 行与 `team_position` 3 行，都来自 `data/manual/`（`handbook.json` / `positions.json`），每行带 `evidence` 文本并显示在页上——这两维**没有逐条可读回的 CN 文本源**（`handbook_type` 整张表在 gametip 里搜不到词条；站位只有 `index_fleetfront` / `index_fleetrear` 两条 1:1 对应，潜艇只有 `ship_formationUI_fleetName_*_ss` 一族的共同后缀），所以名字落人工表、取值域与实测分布构建期对账，出现未登记值或登记了空类别都中止构建。`schema_version` 3，`data/al.sqlite` 23 表，两次建库仍逐字节相同（终态规模见 §7 1.8 行）。三条独立故障都用真产物反向验过会红：临时挪开一页、造一个库里没有的目录、把一艘船的 `nationality` 改成不存在的值（分区断言报「成员合计 858 ≠ 图鉴 859」）。跨维组合页与客户端筛选（URL 可分享）尚未做，获取方式一维不建静态页的原因见 §5。
+
+线上已按同一份名单核过（run `40629682597`，部署 `0c7ad40f.blhx-guide.pages.dev`）：`--sample` 抽的 7 条 URL 全 200（`/` + 舰船页三个位置 + 分类页三个位置），未渲染路径 404；抓线上 HTML 回读，`/category/handbook/collab/` 的 H1 是「联动舰船」且含 91 条舰船链与证据段，`/category/position/submarine/` 47 条，`/category/ship-type/22/` 的 H1 是「风帆·潜艇编队」——同名舰种的消歧在生产端也成立。
 
 - 扩至 859 条目 / 3,427 阶段行入库（表内阶段行 3,429，覆盖 860 个 skin_id，其中 2 行属孤儿 group 进隔离清单）/ 2,730 皮肤；落实正向枚举过滤（阶段 1 已跑通，见 §7 1.7 实测行）
 - 详情页完整：六维雷达、**1–100 级**属性曲线（含 `attrs_growth_extra`，见 §3.7）、突破表、装备位与效率、**技能名与描述文本**（buff 机制与触发数值不在范围，§8.2）、皮肤画廊、改造分支、舰队科技点、**语音文本**（B 档 `ship_skin_words`）、获取方式（含跳转文案）
