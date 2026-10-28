@@ -255,9 +255,11 @@ export default async function ShipPage({ params }: { params: Promise<Params> }) 
             <span>
               改造后皮肤 skinId <b>{ship.retrofitSkinId}</b>
             </span>
-            <span>
-              改造后技能 <b>{ship.retrofitSkill || '—'}</b>
-            </span>
+          </p>
+          <p className="note">
+            改造带来的技能与雷达变化字段（<code>trans_skill</code> / <code>trans_radar</code>）语义没有文本源可判定——
+            厌战的 <code>trans_skill</code> 指向 11880「皇家传奇」，而它突破 1 阶段就已持有这条技能，所以它不是「改造后新技能」。
+            判不清就不写，等口径盘清再上页（PLAN §3.5）。
           </p>
           <table>
             <thead>

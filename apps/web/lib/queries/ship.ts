@@ -67,7 +67,6 @@ export interface ShipPage {
   skins: Skin[]
   sources: Source[]
   retrofitSkinId: number | null
-  retrofitSkill: string | null
   retrofitNodes: RetrofitNode[]
   fleetTechClass: string | null
   fleetTechPt: number | null
@@ -201,7 +200,6 @@ export function getShipPage(db: DatabaseSync, groupType: number): ShipPage | nul
     skins,
     sources,
     retrofitSkinId: retrofit === undefined ? null : num(retrofit, 'result_skin_id'),
-    retrofitSkill: retrofit === undefined ? null : str(retrofit, 'trans_skill'),
     retrofitNodes,
     fleetTechClass: tech === undefined ? null : str(tech, 'class_name'),
     fleetTechPt: tech === undefined ? null : num(tech, 'pt_get'),
